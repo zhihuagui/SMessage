@@ -7,6 +7,8 @@ const False = createToken({ name: "False", pattern: /false/ });
 const Null = createToken({ name: "Null", pattern: /null/ });
 const LCurly = createToken({ name: "LCurly", pattern: /{/ });
 const RCurly = createToken({ name: "RCurly", pattern: /}/ });
+const LBracket = createToken({ name: "LBracket", pattern: /\(/ });
+const RBracket = createToken({ name: "RBracket", pattern: /\)/ });
 const LSquare = createToken({ name: "LSquare", pattern: /\[/ });
 const RSquare = createToken({ name: "RSquare", pattern: /]/ });
 const Comma = createToken({ name: "Comma", pattern: /,/ });
@@ -55,6 +57,8 @@ const allTokens = [
     StringLiteral,
     LCurly,
     RCurly,
+    LBracket,
+    RBracket,
     LSquare,
     RSquare,
     Comma,
@@ -94,36 +98,68 @@ class SMSGParser extends CstParser {
             })
         });
 
-        $.RULE('memberValue', () => {
+        $.RULE('baseType', () => {
             $.OR([
                 {
                     ALT: () => {
-                        $.CONSUME1(Literal)
-                        $.CONSUME(Dot)
-                        $.CONSUME2(Literal)
-                    }
+                        $.CONSUME(Literal)
+                        $.MANY(() => {
+                            $.CONSUME(Dot)
+                            $.CONSUME1(Literal)
+                        })
+                    } 
                 },
-                { ALT: () => $.CONSUME(NumberLiteral) },
-                { ALT: () => $.CONSUME(Literal) },
-                { ALT: () => $.CONSUME(StringLiteral) },
-                { ALT: () => $.CONSUME(True) },
-                { ALT: () => $.CONSUME(False) },
+                {
+                    ALT: () => {
+                        $.CONSUME(LBracket)
+                        $.SUBRULE($['combineType'])
+                    }
+                }
             ]);
         });
 
-        $.RULE('memberOrTypes', () => {
-            $.SUBRULE($['memberValue'])
+        $.RULE('combineType', () => {
+            $.SUBRULE($['baseType'])
             $.MANY(() => {
                 $.CONSUME(OROP)
-                $.SUBRULE1($['memberValue'])
+                $.SUBRULE1($['baseType'])
+            });
+            $.MANY1(() => {
+                $.CONSUME(LSquare)
+                $.CONSUME(RSquare)
             })
-        })
+        });
+
+        // $.RULE('memberValue', () => {
+        //     $.OR([
+        //         {
+        //             ALT: () => {
+        //                 $.CONSUME1(Literal)
+        //                 $.CONSUME(Dot)
+        //                 $.CONSUME2(Literal)
+        //             }
+        //         },
+        //         { ALT: () => $.CONSUME(NumberLiteral) },
+        //         { ALT: () => $.CONSUME(Literal) },
+        //         { ALT: () => $.CONSUME(StringLiteral) },
+        //         { ALT: () => $.CONSUME(True) },
+        //         { ALT: () => $.CONSUME(False) },
+        //     ]);
+        // });
+
+        // $.RULE('memberOrTypes', () => {
+        //     $.SUBRULE($['memberValue'])
+        //     $.MANY(() => {
+        //         $.CONSUME(OROP)
+        //         $.SUBRULE1($['memberValue'])
+        //     })
+        // })
 
         $.RULE('memberDefine', () => {
             $.CONSUME(Literal)
             $.OPTION(() => {
                 $.CONSUME(Colon);
-                $.SUBRULE($['memberOrTypes']);
+                $.SUBRULE($['combineType']);
             })
         });
 

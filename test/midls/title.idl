@@ -2,7 +2,7 @@
 enum TitleButtonEnum {
     Minimize = 1,
     MaxRestore,
-    Close,
+    Close
 }
 
 struct TitleButtonClick {
