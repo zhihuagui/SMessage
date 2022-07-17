@@ -11,6 +11,8 @@ const LBracket = createToken({ name: "LBracket", pattern: /\(/ });
 const RBracket = createToken({ name: "RBracket", pattern: /\)/ });
 const LSquare = createToken({ name: "LSquare", pattern: /\[/ });
 const RSquare = createToken({ name: "RSquare", pattern: /]/ });
+const LAngleBracket = createToken({ name: "LAngleBracket", pattern: /</ });
+const RAngleBracket = createToken({ name: "RAngleBracket", pattern: />/ });
 const Comma = createToken({ name: "Comma", pattern: /,/ });
 const Colon = createToken({ name: "Colon", pattern: /:/ });
 const Semicolon = createToken({ name: "Semicolon", pattern: /;/ });
@@ -59,6 +61,8 @@ const allTokens = [
     RCurly,
     LBracket,
     RBracket,
+    LAngleBracket,
+    RAngleBracket,
     LSquare,
     RSquare,
     Comma,
@@ -114,6 +118,15 @@ class SMSGParser extends CstParser {
                         $.CONSUME(LBracket)
                         $.SUBRULE($['combineType'])
                         $.CONSUME(RBracket)
+                    }
+                },
+                {
+                    ALT: () => {
+                        $.CONSUME(LAngleBracket)
+                        $.CONSUME2(Literal)
+                        $.CONSUME(Comma)
+                        $.SUBRULE2($['combineType'])
+                        $.CONSUME(RAngleBracket)
                     }
                 }
             ])
@@ -296,6 +309,12 @@ interface IBaseType {
         combineType: [ICombineType];
         LSquare?: TokenDef<'['>[];
         RSquare?: TokenDef<']'>[];
+    } | {
+        Literal: [TokenDef<string>];
+        Comma: [TokenDef<','>];
+        combineType: [ICombineType];
+        LAngleBracket: [TokenDef<'<'>];
+        RAngleBracket: [TokenDef<'>'>];
     }
 }
 

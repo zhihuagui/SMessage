@@ -1,7 +1,7 @@
 import { ISMSGParserResult, parseMIDL } from './parser';
 import * as fs from 'fs';
 import { SMessageSchemas } from './msgschema';
-import { ICombineType } from './parser';
+import { ICombineType as IParserCombineType } from './parser';
 
 export class SMessageCompiler {
     constructor(files: string[], historyFile?: string) {
@@ -68,10 +68,14 @@ export class SMessageCompiler {
         });
     }
 
-    private combineTypeToString(combType: ICombineType) {
+    private combineTypeToString(combType: IParserCombineType) {
         const baseTypes = combType.children.baseType;
         const btypeStrs = baseTypes.map((btype) => {
-            if ('Literal' in btype.children) {
+            if ('Comma' in btype.children) {
+                const kimg = btype.children.Literal[0].image;
+                const img = this.combineTypeToString(btype.children.combineType[0]);
+                return `Map<${kimg}, ${img}>`;
+            } else if ('Literal' in btype.children) {
                 const sqNum = btype.children.LSquare ? btype.children.LSquare.length : 0;
                 const img = btype.children.Literal[0].image;
                 return `${img}${this.getRepeatRepeats(sqNum, '[]')}`;
