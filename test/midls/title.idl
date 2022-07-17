@@ -1,0 +1,10 @@
+
+enum TitleButtonEnum {
+    Minimize = 1,
+    MaxRestore,
+    Close,
+}
+
+struct TitleButtonClick {
+    ButtonType: TitleButtonEnum;
+}

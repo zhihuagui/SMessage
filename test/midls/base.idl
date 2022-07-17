@@ -1,0 +1,32 @@
+
+struct Point2D {
+    x: float64;
+    y: float64;
+}
+
+struct MouseMove {
+    start: Point2D;
+    end: Point2D;
+    ctrlKey: bool;
+    shiftKey: bool;
+    optionKey: bool;
+}
+
+enum MouseKey: uint8 {
+    left = 1,
+    middle = 2,
+    right = 3
+}
+
+struct MouseDown {
+    position: Point2D;
+    button: MouseKey;
+    ctrlKey: bool;
+    shiftKey: bool;
+    optionKey: bool;
+}
+
+struct WorkingArea {
+    path: Point2D[];
+    fov: float64;
+}
