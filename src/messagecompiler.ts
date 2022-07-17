@@ -1,16 +1,7 @@
-import type { CstNode } from 'chevrotain';
 import { ISMSGParserResult, parseMIDL } from './parser';
 import * as fs from 'fs';
 import { SMessageSchemas } from './msgschema';
-
-class MessageSchema {
-    constructor() {}
-
-    private basePath: string;
-    private typeNameToTypeId: Map<string, number> = new Map();
-    private typeIdToCst: Map<number, CstNode> = new Map();
-}
-
+import { ICombineType } from './parser';
 
 export class SMessageCompiler {
     constructor(files: string[], historyFile?: string) {
@@ -69,20 +60,43 @@ export class SMessageCompiler {
                     });
                     stuts.children.memberDefine.forEach((memdef) => {
                         const memName = memdef.children.Literal[0].image;
-                        const memTypes = memdef.children.memberOrTypes[0].children.memberValue.map((tp) => {
-                            const memberType = tp.children.Literal;
-                            if (memberType) {
-                                return memberType.map(memliter => {
-                                    return memliter.image;
-                                });
-                            }
-                            throw new Error('Have no member.');
-                        });
-                        console.log(`memName: ${memName}, memtype: ${memTypes.map(callChain => callChain.join('.')).join('|')}`);
+                        const memStr = this.combineTypeToString(memdef.children.combineType[0]);
+                        console.log(`memName: ${memName}, memtype: ${memStr}`);
                     });
                 });
             }
         });
+    }
+
+    private combineTypeToString(combType: ICombineType) {
+        const baseTypes = combType.children.baseType;
+        const btypeStrs = baseTypes.map((btype) => {
+            if ('Literal' in btype.children) {
+                const sqNum = btype.children.LSquare ? btype.children.LSquare.length : 0;
+                const img = btype.children.Literal[0].image;
+                return `${img}${this.getRepeatRepeats(sqNum, '[]')}`;
+            } else if ('combineType' in btype.children) {
+                const sqNum = btype.children.LSquare ? btype.children.LSquare.length : 0;
+                const img = this.combineTypeToString(btype.children.combineType[0]);
+                return `${img}${this.getRepeatRepeats(sqNum, '[]')}`;
+            }
+            throw new Error('Unsupport Base Type.');
+        });
+        if (btypeStrs.length > 1) {
+            return `(${btypeStrs.join(' | ')})`;
+        }
+        return btypeStrs[0];
+    }
+
+    private getRepeatRepeats(repeat: number, str: string) {
+        if (repeat === 0) {
+            return '';
+        }
+        let rst = '';
+        for (let i = 0; i < repeat; i++) {
+            rst += str;
+        }
+        return rst;
     }
 
     private initPrevSchema() {

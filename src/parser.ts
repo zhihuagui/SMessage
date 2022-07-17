@@ -113,9 +113,14 @@ class SMSGParser extends CstParser {
                     ALT: () => {
                         $.CONSUME(LBracket)
                         $.SUBRULE($['combineType'])
+                        $.CONSUME(RBracket)
                     }
                 }
-            ]);
+            ])
+            $.MANY1(() => {
+                $.CONSUME(LSquare)
+                $.CONSUME(RSquare)
+            })
         });
 
         $.RULE('combineType', () => {
@@ -123,37 +128,8 @@ class SMSGParser extends CstParser {
             $.MANY(() => {
                 $.CONSUME(OROP)
                 $.SUBRULE1($['baseType'])
-            });
-            $.MANY1(() => {
-                $.CONSUME(LSquare)
-                $.CONSUME(RSquare)
             })
         });
-
-        // $.RULE('memberValue', () => {
-        //     $.OR([
-        //         {
-        //             ALT: () => {
-        //                 $.CONSUME1(Literal)
-        //                 $.CONSUME(Dot)
-        //                 $.CONSUME2(Literal)
-        //             }
-        //         },
-        //         { ALT: () => $.CONSUME(NumberLiteral) },
-        //         { ALT: () => $.CONSUME(Literal) },
-        //         { ALT: () => $.CONSUME(StringLiteral) },
-        //         { ALT: () => $.CONSUME(True) },
-        //         { ALT: () => $.CONSUME(False) },
-        //     ]);
-        // });
-
-        // $.RULE('memberOrTypes', () => {
-        //     $.SUBRULE($['memberValue'])
-        //     $.MANY(() => {
-        //         $.CONSUME(OROP)
-        //         $.SUBRULE1($['memberValue'])
-        //     })
-        // })
 
         $.RULE('memberDefine', () => {
             $.CONSUME(Literal)
@@ -204,6 +180,7 @@ class SMSGParser extends CstParser {
                 $.CONSUME(Comma)
                 $.SUBRULE2($['enumMember'])
             })
+            $.OPTION2(() => $.CONSUME2(Comma))
             $.CONSUME(RCurly)
         });
 
@@ -309,6 +286,26 @@ interface IEnumDef {
     }
 }
 
+interface IBaseType {
+    name: 'baseType';
+    children: {
+        Literal: [TokenDef<string>];
+        LSquare?: TokenDef<'['>[];
+        RSquare?: TokenDef<']'>[];
+    } | {
+        combineType: [ICombineType];
+        LSquare?: TokenDef<'['>[];
+        RSquare?: TokenDef<']'>[];
+    }
+}
+
+export interface ICombineType {
+    name: 'combineType';
+    children: {
+        baseType: IBaseType[];
+    }
+}
+
 interface IStructDef {
     name: 'struct';
     children: {
@@ -319,22 +316,7 @@ interface IStructDef {
             children: {
                 Literal: [TokenDef<string>];
                 Colon: [TokenDef<':'>];
-                memberOrTypes: [{
-                    name: 'memberOrTypes';
-                    children: {
-                        memberValue: {
-                            name: 'memberValue';
-                            children: {
-                                Dot?: [TokenDef<'.'>];
-                                Literal?: TokenDef<string>[];
-                                NumberLiteral?: [TokenDef<'NumberLiteral'>];
-                                StringLiteral?: [TokenDef<'StringLiteral'>];
-                                True?: [TokenDef<'true'>];
-                                False?: [TokenDef<'false'>];
-                            }
-                        }[];
-                    }
-                }];
+                combineType: [ICombineType];
             }
         }[];
     }

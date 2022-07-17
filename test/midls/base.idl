@@ -27,6 +27,6 @@ struct MouseDown {
 }
 
 struct WorkingArea {
-    path: Point2D[];
-    fov: float64;
+    path: (Point2D | float64)[];
+    fov: float64 | float32;
 }
