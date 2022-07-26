@@ -5,27 +5,31 @@ export interface NativeSupportType {
 }
 
 export const NativeSupportTypes: NativeSupportType[] = [
-    { literal: 'bool', size: 1 },
-    { literal: 'int8', size: 1 },
-    { literal: 'uint8', size: 1 },
-    { literal: 'int16', size: 2 },
-    { literal: 'uint16', size: 2 },
-    { literal: 'int32', size: 4 },
-    { literal: 'uint32', size: 4 },
-    { literal: 'float32', size: 4 },
-    { literal: 'int64', size: 8 },
-    { literal: 'uint64', size: 8 },
-    { literal: 'float64', size: 8 },
-    { literal: 'string', size: 4 + 4 + 4 },
+    { literal: 'bool',      size: 1 },
+    { literal: 'int8',      size: 1 },
+    { literal: 'uint8',     size: 1 },
+    { literal: 'int16',     size: 2 },
+    { literal: 'uint16',    size: 2 },
+    { literal: 'int32',     size: 4 },
+    { literal: 'uint32',    size: 4 },
+    { literal: 'float32',   size: 4 },
+    { literal: 'int64',     size: 8 },
+    { literal: 'uint64',    size: 8 },
+    { literal: 'float64',   size: 8 },
+    { literal: 'string',    size: 4 + 4 },
 ];
 
-export interface EnumDescription {
+export interface BaseDescription {
+    typeDescId: number;
     scope: string;
     typeName: string;
+}
+
+export interface EnumDescription extends BaseDescription {
     dataType: string;
     valueTypes: {
         name: string;
-        value: number | string;
+        value: number;
     }[];
 }
 
@@ -42,10 +46,7 @@ export interface MapType {
     valueType: NativeSupportType | ICombineType | ArrayType | MapType;
 }
 
-export interface TypeDescription {
-    typeDescId: number;
-    scope: string;
-    typename: string;
+export interface TypeDescription extends BaseDescription {
     size: number;
     members: {
         name: string;

@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "pwa-node",
+            "type": "node",
             "request": "launch",
             "name": "runTest",
             "skipFiles": [
@@ -16,7 +16,7 @@
                 "${workspaceFolder}/**/*.js"
             ],
             "cwd": "${workspaceFolder}",
-            "args": ["-i", "test/midls", "-o", "test/output"]
+            "args": ["-i", "test/midls", "-o", "test/output", "-v", "0.0.1"]
         }
     ]
 }

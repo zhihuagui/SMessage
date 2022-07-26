@@ -169,10 +169,7 @@ class SMSGParser extends CstParser {
             $.CONSUME(Literal)
             $.OPTION(() => {
                 $.CONSUME(Equals)
-                $.OR([
-                    { ALT: () => $.CONSUME(NumberLiteral) },
-                    { ALT: () => $.CONSUME(StringLiteral) },
-                ])
+                $.CONSUME(NumberLiteral)
             })
         });
 
@@ -275,7 +272,7 @@ interface IImportDef {
     }
 }
 
-interface IEnumDef {
+export interface IEnumDef {
     name: 'enum';
     children: {
         Enum: [TokenDef<'enum'>];
@@ -292,8 +289,7 @@ interface IEnumDef {
             children: {
                 Literal: [TokenDef<string>];
                 Equals: [TokenDef<'='>];
-                NumberLiteral?: [TokenDef<'NumberLiteral'>];
-                StringLiteral?: [TokenDef<'StringLiteral'>];
+                NumberLiteral?: [TokenDef<string>];
             }
         }[];
     }
@@ -325,7 +321,7 @@ export interface ICombineType {
     }
 }
 
-interface IStructDef {
+export interface IStructDef {
     name: 'struct';
     children: {
         Struct: [TokenDef<'struct'>];
