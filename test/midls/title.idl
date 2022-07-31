@@ -1,3 +1,4 @@
+import { Point2D } from "./base.idl";
 
 enum TitleButtonEnum: uint16 {
     Minimize = 1,
@@ -7,4 +8,5 @@ enum TitleButtonEnum: uint16 {
 
 struct TitleButtonClick {
     ButtonType: TitleButtonEnum;
+    Point: Point2D;
 }

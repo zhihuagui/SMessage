@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { IEnumDef, ISMSGParserResult, IStructDef, parseMIDL } from './parser';
-import { EnumDescription, SMessageSchemas, TypeDescription } from './msgschema';
+import { EnumDescription, SMessageSchemas, StructDescription } from './msgschema';
 import { ICombineType as IParserCombineType } from './parser';
 import { isGraterThan } from './version';
 
@@ -23,7 +23,14 @@ type StructTypeDef = {
     cst: IStructDef;
 };
 
-type RawTypeDef = EnumTypeDef | StructTypeDef;
+type ImportTypeDef = {
+    fileName: string;
+    type: 'import';
+    importNames: string[];
+    importFrom: string;
+}
+
+type RawTypeDef = EnumTypeDef | StructTypeDef | ImportTypeDef;
 
 export class SMessageCompiler {
     constructor(rootDir: string, files: string[], currVersion: string, historyFile?: string) {
@@ -64,6 +71,7 @@ export class SMessageCompiler {
         this._fileNameToCst.forEach((cst, fname) => {
             const structs = cst.children['struct'];
             const enums = cst.children['enum'];
+            const imports = cst.children['import'];
             if (enums) {
                 enums.forEach((enit) => {
                     const typeName = enit.children.Literal[0].image;
@@ -93,20 +101,55 @@ export class SMessageCompiler {
                     });
                 });
             }
+            if (imports) {
+                imports.forEach((ipt) => {
+                    let fromFile = ipt.children.StringLiteral[0].image;
+                    if (fromFile.length > 2) {
+                        fromFile = fromFile.substring(1, fromFile.length - 1);
+                    }
+                    let rstFile = path.join(path.dirname(fname), fromFile);
+                    if (!fs.existsSync(rstFile)) {
+                        rstFile = path.join(path.dirname(fname), `${rstFile}.${path.extname(fname)}`);
+                        if (!fs.existsSync(rstFile)) {
+                            throw new Error(`The file ${fromFile} import from ${fname} not exist.`);
+                        }
+                    }
+                    const imports = ipt.children.Literal.map(ipnm => ipnm.image);
+                    objectDefs.push({
+                        fileName: fname,
+                        type: 'import',
+                        importFrom: rstFile,
+                        importNames: imports,
+                    });
+                });
+            }
         });
 
         const retJson: SMessageSchemas = {
             version: this._version,
             enumDefs: [],
-            typeDefs: [],
+            structDefs: [],
         };
         objectDefs.forEach((typedef) => {
             if (typedef.type === 'enum') {
                 retJson.enumDefs.push(this._enumDefToEnumDesc(typedef));
+            } else if (typedef.type === 'struct') {
+                retJson.structDefs.push(this._structDefToStructDesc(typedef));
             }
         });
 
         return retJson;
+    }
+
+    private _structDefToStructDesc(structDef: StructTypeDef): StructDescription {
+        const ret: StructDescription = {
+            typeDescId: structDef.typeId,
+            scope: structDef.scope,
+            typeName: structDef.name,
+            size: 0,
+            members: [],
+        };
+        return ret;
     }
 
     private _enumDefToEnumDesc(enumDef: EnumTypeDef): EnumDescription {
@@ -190,7 +233,7 @@ export class SMessageCompiler {
             this._prevSchema = {
                 version: '0.0.0',
                 enumDefs: [],
-                typeDefs: [],
+                structDefs: [],
             };
             return;
         }
@@ -220,7 +263,7 @@ export class SMessageCompiler {
             this._maxTypeId = edef.typeDescId;
         });
 
-        this._prevSchema.typeDefs.forEach((tdef) => {
+        this._prevSchema.structDefs.forEach((tdef) => {
             let scpdeDef = this._scopeDefs.get(tdef.scope);
             if (!scpdeDef) {
                 scpdeDef = [];
@@ -240,5 +283,5 @@ export class SMessageCompiler {
     private _prevSchema: SMessageSchemas;
     private _currentSchema: SMessageSchemas;
     private _maxTypeId: number = 0;
-    private _scopeDefs: Map<string, (EnumDescription | TypeDescription)[]> = new Map();
+    private _scopeDefs: Map<string, (EnumDescription | StructDescription)[]> = new Map();
 }

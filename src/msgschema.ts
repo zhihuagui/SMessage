@@ -46,7 +46,7 @@ export interface MapType {
     valueType: NativeSupportType | ICombineType | ArrayType | MapType;
 }
 
-export interface TypeDescription extends BaseDescription {
+export interface StructDescription extends BaseDescription {
     size: number;
     members: {
         name: string;
@@ -56,6 +56,6 @@ export interface TypeDescription extends BaseDescription {
 
 export interface SMessageSchemas {
     version: string;
-    typeDefs: TypeDescription[];
+    structDefs: StructDescription[];
     enumDefs: EnumDescription[];
 }
