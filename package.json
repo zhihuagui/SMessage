@@ -1,5 +1,10 @@
 {
     "name": "s-message",
+    "author": {
+        "name": "zhihuagui",
+        "email": "zhihuagui@gmail.com"
+    },
+    "readme": "README.md",
     "scripts": {
         "build": "webpack",
         "dev": "webpack --mode=development --watch"

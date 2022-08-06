@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { IEnumDef, ISMSGParserResult, IStructDef, parseMIDL } from './parser';
-import { EnumDescription, SMessageSchemas, StructDescription } from './msgschema';
+import { IBaseType, IEnumDef, ISMSGParserResult, IStructDef, parseMIDL } from './parser';
+import { AllTypeDesc, ICombineTypeDesc, EnumDescription, SMessageSchemas, StructDescription, TypeDescType, IMapTypeDesc, NativeSupportTypes, IUserDefTypeDesc, IArrayTypeDesc, MINUserDefTypeId } from './msgschema';
 import { ICombineType as IParserCombineType } from './parser';
 import { isGraterThan } from './version';
 
@@ -125,6 +125,9 @@ export class SMessageCompiler {
             }
         });
 
+
+        this.generateRawTypeMaps(objectDefs);
+
         const retJson: SMessageSchemas = {
             version: this._version,
             enumDefs: [],
@@ -143,12 +146,20 @@ export class SMessageCompiler {
 
     private _structDefToStructDesc(structDef: StructTypeDef): StructDescription {
         const ret: StructDescription = {
-            typeDescId: structDef.typeId,
+            typeId: structDef.typeId,
             scope: structDef.scope,
             typeName: structDef.name,
             size: 0,
             members: [],
         };
+        structDef.cst.children.memberDefine.forEach((memberDef) => {
+            const memberName = memberDef.children.Literal[0].image;
+            const memberType = this.combineTypeToTypeDef(structDef.fileName, memberDef.children.combineType[0]);
+            ret.members.push({
+                name: memberName,
+                type: memberType,
+            });
+        });
         return ret;
     }
 
@@ -158,7 +169,7 @@ export class SMessageCompiler {
             dataType = enumDef.cst.children.enumDataType[0].children.Literal[0].image;
         }
         const ret: EnumDescription = {
-            typeDescId: enumDef.typeId,
+            typeId: enumDef.typeId,
             scope: enumDef.scope,
             typeName: enumDef.name,
             dataType,
@@ -179,18 +190,103 @@ export class SMessageCompiler {
 
     private _getAdditionalRawType(rawType: {name: string, fileName: string}) {
         const scope = path.relative(this._rootDir, rawType.fileName);
-        let typeId = 0;
+        let typeId = MINUserDefTypeId;
         const tps = this._scopeDefs.get(scope);
         if (tps) {
             const ans = tps.find(tp => tp.typeName === rawType.name);
             if (ans) {
-                typeId = ans.typeDescId;
+                typeId = ans.typeId;
             }
         }
-        if (typeId === 0) {
+        if (typeId === MINUserDefTypeId) {
             typeId = ++this._maxTypeId;
         }
         return { scope, typeId };
+    }
+
+    private combineTypeToTypeDef(fileName: string, combType: IParserCombineType): AllTypeDesc {
+        const baseTypes = combType.children.baseType;
+        if (baseTypes.length > 1) {
+            const ret: ICombineTypeDesc = {
+                descType: TypeDescType.CombineType,
+                typeId: 63,
+                types: [],
+            };
+            baseTypes.forEach((btype) => {
+                const btypedef = this.baseTypeToTypeDef(fileName, btype);
+                ret.types.push(btypedef);
+            });
+            return ret;
+        }
+        return this.baseTypeToTypeDef(fileName, baseTypes[0]);
+    }
+
+    private baseTypeToTypeDef(fileName: string, btype: IBaseType): Exclude<AllTypeDesc, ICombineTypeDesc> {
+        if ('Comma' in btype.children) {
+            const keyType = this.typeStringToType(fileName, btype.children.Literal[0].image);
+            if (keyType.descType === TypeDescType.UserDefType) {
+                throw new Error(`The UserDefined type ${btype.children.Literal[0].image} cannot use as map key.`);
+            }
+            const ret: IMapTypeDesc = {
+                descType: TypeDescType.MapType,
+                typeId: 62,
+                keyType,
+                valueType: this.combineTypeToTypeDef(fileName, btype.children.combineType[0]),
+            };
+            return ret;
+        } else if ('Literal' in btype.children) {
+            const sqNum = btype.children.LSquare ? btype.children.LSquare.length : 0;
+            if (sqNum > 0) {
+                const ret: IArrayTypeDesc = {
+                    descType: TypeDescType.ArrayType,
+                    typeId: 61,
+                    arrayDims: sqNum,
+                    baseType: this.typeStringToType(fileName, btype.children.Literal[0].image),
+                };
+                return ret;
+            } else {
+                return this.typeStringToType(fileName, btype.children.Literal[0].image);
+            }
+        } else if ('combineType' in btype.children) {
+            const sqNum = btype.children.LSquare ? btype.children.LSquare.length : 0;
+            if (sqNum > 0) {
+                const ret: IArrayTypeDesc = {
+                    descType: TypeDescType.ArrayType,
+                    typeId: 61,
+                    arrayDims: sqNum,
+                    baseType: this.combineTypeToTypeDef(fileName, btype.children.combineType[0]),
+                };
+                return ret;
+            } else {
+                throw new Error(`Cannot define Combine type in combine Type.`);
+            }
+        }
+        throw new Error(`Unsupport base type.`);
+    }
+
+    private typeStringToType(fileName: string, typeName: string) {
+        const ntvType = NativeSupportTypes.find(tp => tp.literal === typeName);
+        if (ntvType) {
+            return ntvType;
+        }
+        const rawTypeKey = `${typeName}$${fileName}`;
+        const rawType = this._rawTypeMapping.get(rawTypeKey);
+        if (rawType) {
+            const ret: IUserDefTypeDesc = {
+                descType: TypeDescType.UserDefType,
+                typeId: -1,
+            }
+            if (rawType.type === 'enum') {
+                ret.typeId = rawType.typeId;
+            } else if (rawType.type === 'struct') {
+                ret.typeId = rawType.typeId;
+            }
+            if (ret.typeId < 0) {
+                throw new Error(`The type: ${typeName} in file: ${fileName} is unsupoort.`);
+            }
+            return ret;
+        }
+        throw new Error(`The type: ${typeName} in file: ${fileName} is undefined.`);
     }
 
     private combineTypeToString(combType: IParserCombineType) {
@@ -260,7 +356,7 @@ export class SMessageCompiler {
                 this._scopeDefs.set(edef.scope, scpdeDef);
             }
             scpdeDef.push(edef);
-            this._maxTypeId = edef.typeDescId;
+            this._maxTypeId = edef.typeId;
         });
 
         this._prevSchema.structDefs.forEach((tdef) => {
@@ -270,10 +366,45 @@ export class SMessageCompiler {
                 this._scopeDefs.set(tdef.scope, scpdeDef);
             }
             scpdeDef.push(tdef);
-            this._maxTypeId = tdef.typeDescId;
+            this._maxTypeId = tdef.typeId;
         });
     }
 
+    private generateRawTypeMaps(rawTypes: RawTypeDef[]) {
+        this._rawTypeMapping.clear();
+        rawTypes.forEach(rtypeDef => {
+            if (rtypeDef.type === 'enum' || rtypeDef.type === 'struct') {
+                const key = `${rtypeDef.name}$${rtypeDef.fileName}`;
+
+                if (this._rawTypeMapping.has(key)) {
+                    throw new Error(`Duplicate define type ${rtypeDef.name} in file ${rtypeDef.fileName}.`);
+                }
+                this._rawTypeMapping.set(key, rtypeDef);
+            }
+        });
+
+        rawTypes.forEach(rtypeDef => {
+            if (rtypeDef.type === 'import') {
+                rtypeDef.importNames.forEach((iptSingle) => {
+                    const key = `${iptSingle}$${rtypeDef.fileName}`;
+
+                    if (this._rawTypeMapping.has(key)) {
+                        throw new Error(`Duplicate define type ${iptSingle} in file ${rtypeDef.fileName}.`);
+                    }
+
+                    const keyOrigin = `${iptSingle}$${rtypeDef.importFrom}`;
+                    const rst = this._rawTypeMapping.get(keyOrigin);
+
+                    if (!rst) {
+                        throw new Error(`Cannot find the definition ${iptSingle} in file ${rtypeDef.importFrom}`);
+                    }
+                    this._rawTypeMapping.set(key, rst);
+                });
+            }
+        });
+    }
+
+    private _rawTypeMapping: Map<string, RawTypeDef> = new Map();
 
     private _rootDir: string;
     private _version: string;
@@ -282,6 +413,6 @@ export class SMessageCompiler {
     private _historyFile?: string;
     private _prevSchema: SMessageSchemas;
     private _currentSchema: SMessageSchemas;
-    private _maxTypeId: number = 0;
+    private _maxTypeId: number = MINUserDefTypeId;
     private _scopeDefs: Map<string, (EnumDescription | StructDescription)[]> = new Map();
 }

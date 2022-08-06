@@ -295,7 +295,7 @@ export interface IEnumDef {
     }
 }
 
-interface IBaseType {
+export interface IBaseType {
     name: 'baseType';
     children: {
         Literal: [TokenDef<string>];
