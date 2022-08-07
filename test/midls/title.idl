@@ -1,4 +1,6 @@
-import { Point2D } from "./base.idl";
+package slime.message.title;
+
+import { Point2D } from slime.message.base;
 
 enum TitleButtonEnum: uint16 {
     Minimize = 1,

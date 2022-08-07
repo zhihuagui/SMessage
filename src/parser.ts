@@ -2,6 +2,7 @@
 import { createToken, CstParser, IToken, Lexer, tokenMatcher, CstNode } from 'chevrotain';
 
 // ----------------- lexer -----------------
+const Package = createToken({ name: 'Package', pattern: /package/});
 const True = createToken({ name: "True", pattern: /true/ });
 const False = createToken({ name: "False", pattern: /false/ });
 const Null = createToken({ name: "Null", pattern: /null/ });
@@ -78,10 +79,11 @@ const allTokens = [
     Export,
     Enum,
     Struct,
-    Literal,
+    Package,
     Equals,
     Dot,
-    OROP
+    OROP,
+    Literal,
 ];
 
 const SMSGLexer = new Lexer(allTokens);
@@ -95,11 +97,26 @@ class SMSGParser extends CstParser {
         $.RULE('MidlFile', () => {
             $.MANY(() => {
                 $.OR([
+                    { ALT: () => $.SUBRULE($['package']) },
                     { ALT: () => $.SUBRULE($['import']) },
-                    { ALT: () => $.SUBRULE($['enum']) },
+                    { ALT: () => $.SUBRULE($['enum'])   },
                     { ALT: () => $.SUBRULE($['struct']) },
                 ])
             })
+        });
+
+        $.RULE('packageName', () => {
+            $.CONSUME(Literal)
+            $.MANY(() => {
+                $.CONSUME(Dot)
+                $.CONSUME1(Literal)
+            })
+        });
+
+        $.RULE('package', () => {
+            $.CONSUME(Package)
+            $.SUBRULE($['packageName'])
+            $.CONSUME(Semicolon)
         });
 
         $.RULE('baseType', () => {
@@ -204,7 +221,7 @@ class SMSGParser extends CstParser {
             })
             $.CONSUME(RCurly)
             $.CONSUME(From)
-            $.CONSUME(StringLiteral)
+            $.SUBRULE($['packageName'])
             $.CONSUME(Semicolon)
         });
 
@@ -242,6 +259,7 @@ class SMSGParser extends CstParser {
 export interface ISMSGParserResult {
     name: 'MidlFile';
     children: {
+        package?: IPackageDef[];
         import?: IImportDef[];
         enum?: IEnumDef[];
         struct?: IStructDef[];
@@ -268,7 +286,27 @@ interface IImportDef {
     children: {
         Import: [TokenDef<'name'>];
         Literal: TokenDef<string>[];
-        StringLiteral: [TokenDef<string>];
+        packageName: [{
+            name: 'packageName';
+            children: {
+                Dot: TokenDef<'.'>[];
+                Literal: TokenDef<string>[];
+            }
+        }];
+    }
+}
+
+interface IPackageDef {
+    name: 'package';
+    children: {
+        Package: [TokenDef<'package'>];
+        packageName: [{
+            name: 'packageName';
+            children: {
+                Dot: TokenDef<'.'>[];
+                Literal: TokenDef<string>[];
+            }
+        }];
     }
 }
 

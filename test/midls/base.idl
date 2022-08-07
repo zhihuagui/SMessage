@@ -1,3 +1,4 @@
+package slime.message.base;
 
 struct Point2D {
     x: float64;

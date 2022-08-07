@@ -52,7 +52,7 @@ if (dirWalker.getAllFiles().length === 0) {
     console.log(`The rootDir ${option.rootDir} has no idl files.`);
 }
 
-const compiler = new SMessageCompiler(option.rootDir, dirWalker.getAllFiles(), option.outputVersion, dirWalker.hasHistory ? dirWalker.historyFileName : undefined);
+const compiler = new SMessageCompiler(dirWalker.getAllFiles(), option.outputVersion, dirWalker.hasHistory ? dirWalker.historyFileName : undefined);
 compiler.compileAllFiles();
 
 const gen = new TypescriptCodeGen(compiler.currentSchema, 'out');
