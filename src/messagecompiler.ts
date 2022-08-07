@@ -1,7 +1,19 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { IBaseType, IEnumDef, ISMSGParserResult, IStructDef, parseMIDL } from './parser';
-import { AllTypeDesc, ICombineTypeDesc, EnumDescription, SMessageSchemas, StructDescription, TypeDescType, IMapTypeDesc, NativeSupportTypes, IUserDefTypeDesc, IArrayTypeDesc, MINUserDefTypeId } from './msgschema';
+import {
+    AllTypeDesc,
+    ICombineTypeDesc,
+    EnumDescription,
+    SMessageSchemas,
+    StructDescription,
+    TypeDescType,
+    IMapTypeDesc,
+    NativeSupportTypes,
+    IUserDefTypeDesc,
+    IArrayTypeDesc,
+    MINUserDefTypeId,
+} from './msgschema';
 import { ICombineType as IParserCombineType } from './parser';
 import { isGraterThan } from './version';
 
@@ -29,7 +41,7 @@ type ImportTypeDef = {
     scope: string;
     importNames: string[];
     fromScope: string;
-}
+};
 
 type RawTypeDef = EnumTypeDef | StructTypeDef | ImportTypeDef;
 
@@ -57,7 +69,7 @@ export class SMessageCompiler {
                             console.log(`${perr.message}`);
                         });
                     }
-                } catch(err) {
+                } catch (err) {
                     console.log(`Ignore file ${fname}, due to parse error: ${err}.`);
                 }
             }
@@ -73,7 +85,7 @@ export class SMessageCompiler {
         this._fileNameToCst.forEach((cst, fname) => {
             const pkgs = cst.children['package'];
             if (pkgs && pkgs.length === 1) {
-                const pkgNames = pkgs[0].children.packageName[0].children.Literal.map(tk => tk.image);
+                const pkgNames = pkgs[0].children.packageName[0].children.Literal.map((tk) => tk.image);
                 const pkgStrs = pkgNames.join('.');
                 if (pkg2file.has(pkgStrs)) {
                     throw new Error(`Error: in ${fname}, The package ${pkgStrs} has already declared in ${pkg2file.get(pkgStrs)}.`);
@@ -102,7 +114,7 @@ export class SMessageCompiler {
                         type: 'enum',
                         cst: enit,
                         scope,
-                        typeId: this._getAdditionalRawType({name: enumName, scope})
+                        typeId: this._getAdditionalRawType({ name: enumName, scope }),
                     });
                 });
             }
@@ -115,7 +127,7 @@ export class SMessageCompiler {
                         type: 'struct',
                         cst: stuts,
                         scope,
-                        typeId: this._getAdditionalRawType({name: structName, scope})
+                        typeId: this._getAdditionalRawType({ name: structName, scope }),
                     });
                     stuts.children.memberDefine.forEach((memdef) => {
                         const memName = memdef.children.Literal[0].image;
@@ -126,12 +138,12 @@ export class SMessageCompiler {
             }
             if (imports) {
                 imports.forEach((ipt) => {
-                    const fromPkg = ipt.children.packageName[0].children.Literal.map(tk => tk.image).join('.');
+                    const fromPkg = ipt.children.packageName[0].children.Literal.map((tk) => tk.image).join('.');
                     let fromFile = pkg2file.get(fromPkg);
                     if (!fromFile) {
                         throw new Error(`Cannot find the package: ${fromPkg} in any file.`);
                     }
-                    const imports = ipt.children.Literal.map(ipnm => ipnm.image);
+                    const imports = ipt.children.Literal.map((ipnm) => ipnm.image);
                     objectDefs.push({
                         fileName: fname,
                         type: 'import',
@@ -172,14 +184,14 @@ export class SMessageCompiler {
      */
     private _analyseSizeForAllStruct(msgs: SMessageSchemas) {
         const id2Types: Map<number, StructDescription | EnumDescription> = new Map();
-        msgs.enumDefs.forEach(ed => {
+        msgs.enumDefs.forEach((ed) => {
             id2Types.set(ed.typeId, ed);
         });
-        msgs.structDefs.forEach(sd => {
+        msgs.structDefs.forEach((sd) => {
             id2Types.set(sd.typeId, sd);
         });
 
-        msgs.structDefs.forEach(sd => {
+        msgs.structDefs.forEach((sd) => {
             this._analyseStructDesc(sd, id2Types);
         });
     }
@@ -274,16 +286,16 @@ export class SMessageCompiler {
             } else {
                 value = ret.valueTypes.length > 0 ? ret.valueTypes[ret.valueTypes.length - 1].value + 1 : 1;
             }
-            ret.valueTypes.push({name, value});
+            ret.valueTypes.push({ name, value });
         });
         return ret;
     }
 
-    private _getAdditionalRawType(rawType: {name: string, scope: string}) {
+    private _getAdditionalRawType(rawType: { name: string; scope: string }) {
         let typeId = MINUserDefTypeId;
         const tps = this._scopeDefs.get(rawType.scope);
         if (tps) {
-            const ans = tps.find(tp => tp.typeName === rawType.name);
+            const ans = tps.find((tp) => tp.typeName === rawType.name);
             if (ans) {
                 typeId = ans.typeId;
             }
@@ -355,7 +367,7 @@ export class SMessageCompiler {
     }
 
     private typeStringToType(scope: string, typeName: string) {
-        const ntvType = NativeSupportTypes.find(tp => tp.literal === typeName);
+        const ntvType = NativeSupportTypes.find((tp) => tp.literal === typeName);
         if (ntvType) {
             return ntvType;
         }
@@ -365,7 +377,7 @@ export class SMessageCompiler {
             const ret: IUserDefTypeDesc = {
                 descType: TypeDescType.UserDefType,
                 typeId: -1,
-            }
+            };
             if (rawType.type === 'enum') {
                 ret.typeId = rawType.typeId;
             } else if (rawType.type === 'struct') {
@@ -438,7 +450,6 @@ export class SMessageCompiler {
             throw new Error('Cannot generate new version not larger than prev generated.');
         }
 
-
         this._prevSchema.enumDefs.forEach((edef) => {
             let scpdeDef = this._scopeDefs.get(edef.scope);
             if (!scpdeDef) {
@@ -462,7 +473,7 @@ export class SMessageCompiler {
 
     private generateRawTypeMaps(rawTypes: RawTypeDef[]) {
         this._rawTypeMapping.clear();
-        rawTypes.forEach(rtypeDef => {
+        rawTypes.forEach((rtypeDef) => {
             if (rtypeDef.type === 'enum' || rtypeDef.type === 'struct') {
                 const key = `${rtypeDef.name}$${rtypeDef.scope}`;
 
@@ -473,7 +484,7 @@ export class SMessageCompiler {
             }
         });
 
-        rawTypes.forEach(rtypeDef => {
+        rawTypes.forEach((rtypeDef) => {
             if (rtypeDef.type === 'import') {
                 rtypeDef.importNames.forEach((iptSingle) => {
                     const key = `${iptSingle}$${rtypeDef.scope}`;

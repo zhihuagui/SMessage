@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { SMessageSchemas } from "./msgschema";
+import { SMessageSchemas } from './msgschema';
 
 export class OutputGenerator {
     constructor(schema: SMessageSchemas, outDir: string, historyJson: string) {

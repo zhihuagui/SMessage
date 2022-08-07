@@ -1,8 +1,7 @@
-
 export function versionStrToNums(vstr: string) {
     const splits = vstr.split('.');
     if (splits.length === 3) {
-        return splits.map(vs => {
+        return splits.map((vs) => {
             return parseInt(vs);
         });
     }
@@ -12,7 +11,7 @@ export function versionStrToNums(vstr: string) {
 export function isGraterThan(vstr: string, oriVstr: string) {
     const curV = versionStrToNums(vstr);
     const preV = versionStrToNums(oriVstr);
-    if ((curV[0] > preV[0]) || (curV[1] > preV[1]) || (curV[2] > preV[2])) {
+    if (curV[0] > preV[0] || curV[1] > preV[1] || curV[2] > preV[2]) {
         return true;
     }
     return false;
