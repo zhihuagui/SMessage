@@ -1,25 +1,31 @@
 import fs from 'fs';
-import { SMessageSchemas } from "./msgschema";
+import { OutputGenerator } from './messageoutput';
 
-export class TypescriptCodeGen {
-    constructor(schema: SMessageSchemas, dir: string) {
-        this._schema = schema;
-        this._outDir = dir;
-    }
+export class TypescriptCodeGen extends OutputGenerator {
 
-    public generateOutputs() {
+    public override generate(): void {
+        const scopeString: {[key: string]: string} = {};
+
         this._schema.enumDefs.forEach((edesc) => {
             const outStr = `
-export interface ${edesc.typeName} {
+export enum ${edesc.typeName} {
 ${edesc.valueTypes.map(vt => {
     return `    ${vt.name} = ${vt.value},`;
 }).join('\n')}
 }
             `;
-            console.log(outStr);
+            if (scopeString[edesc.scope]) {
+                scopeString[edesc.scope] += outStr;
+            } else {
+                scopeString[edesc.scope] = outStr;
+            }
         });
+
+        Object.keys(scopeString).forEach(scope => {
+            this.writeScopeString(scopeString[scope], scope, 'ts');
+        });
+
+        super.generate();
     }
 
-    private _schema: SMessageSchemas;
-    private _outDir: string;
 }

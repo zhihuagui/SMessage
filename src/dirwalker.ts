@@ -4,8 +4,9 @@ import * as path from 'path';
 const historyFName = '.smessage.json';
 
 export class DirWalker {
-    constructor(dir: string) {
+    constructor(dir: string, outDir: string) {
         this._workingDir = dir;
+        this._outDir = outDir;
     }
 
     public walkAllDir(): boolean {
@@ -46,9 +47,10 @@ export class DirWalker {
     }
 
     public get historyFileName() {
-        return path.join(this._workingDir, historyFName);
+        return path.join(this._outDir, historyFName);
     }
 
     private _workingDir: string;
+    private _outDir: string;
     private _allFiles: string[] = [];
 }

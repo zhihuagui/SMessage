@@ -43,7 +43,7 @@ if (!inputValid || !outputValid || !versionValid) {
     console.log(`Usage: ${process.argv[0]} ${process.argv[1]} -i inputDir -o outputDir -v currVersion`);
 }
 
-const dirWalker = new DirWalker(option.rootDir);
+const dirWalker = new DirWalker(option.rootDir, option.outputDir);
 const result = dirWalker.walkAllDir();
 if (!result) {
     console.log(`The rootDir ${option.rootDir} cannot open for read.`);
@@ -55,5 +55,5 @@ if (dirWalker.getAllFiles().length === 0) {
 const compiler = new SMessageCompiler(dirWalker.getAllFiles(), option.outputVersion, dirWalker.hasHistory ? dirWalker.historyFileName : undefined);
 compiler.compileAllFiles();
 
-const gen = new TypescriptCodeGen(compiler.currentSchema, 'out');
-gen.generateOutputs();
+const gen = new TypescriptCodeGen(compiler.currentSchema, option.outputDir, dirWalker.historyFileName);
+gen.generate();
