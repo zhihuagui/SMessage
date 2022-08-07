@@ -1,6 +1,7 @@
 import path from 'path';
 import { DirWalker } from './dirwalker';
 import { SMessageCompiler } from './messagecompiler';
+import { TypescriptCodeGen } from './typescriptgenerator';
 import { versionStrToNums } from './version';
 
 const option: {
@@ -54,3 +55,5 @@ if (dirWalker.getAllFiles().length === 0) {
 const compiler = new SMessageCompiler(option.rootDir, dirWalker.getAllFiles(), option.outputVersion, dirWalker.hasHistory ? dirWalker.historyFileName : undefined);
 compiler.compileAllFiles();
 
+const gen = new TypescriptCodeGen(compiler.currentSchema, 'out');
+gen.generateOutputs();

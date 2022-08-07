@@ -18,7 +18,7 @@ export interface ITypeDesc {
 export interface NativeSupportType extends ITypeDesc {
     descType: TypeDescType.NativeSupportType;
     literal: string;
-    size: number;
+    byteSize: number;
 }
 
 export interface ICombineTypeDesc extends ITypeDesc {
@@ -49,18 +49,18 @@ export interface IUserDefTypeDesc extends ITypeDesc {
 export type AllTypeDesc = NativeSupportType | IArrayTypeDesc | IMapTypeDesc | IUserDefTypeDesc | ICombineTypeDesc;
 
 export const NativeSupportTypes: NativeSupportType[] = [
-    { descType: TypeDescType.NativeSupportType, typeId: 1,  literal: 'bool',      size: 1 },
-    { descType: TypeDescType.NativeSupportType, typeId: 2,  literal: 'int8',      size: 1 },
-    { descType: TypeDescType.NativeSupportType, typeId: 3,  literal: 'uint8',     size: 1 },
-    { descType: TypeDescType.NativeSupportType, typeId: 4,  literal: 'int16',     size: 2 },
-    { descType: TypeDescType.NativeSupportType, typeId: 5,  literal: 'uint16',    size: 2 },
-    { descType: TypeDescType.NativeSupportType, typeId: 6,  literal: 'int32',     size: 4 },
-    { descType: TypeDescType.NativeSupportType, typeId: 7,  literal: 'uint32',    size: 4 },
-    { descType: TypeDescType.NativeSupportType, typeId: 8,  literal: 'float32',   size: 4 },
-    { descType: TypeDescType.NativeSupportType, typeId: 9,  literal: 'int64',     size: 8 },
-    { descType: TypeDescType.NativeSupportType, typeId: 10, literal: 'uint64',    size: 8 },
-    { descType: TypeDescType.NativeSupportType, typeId: 11, literal: 'float64',   size: 8 },
-    { descType: TypeDescType.NativeSupportType, typeId: 12, literal: 'string',    size: 4 + 4 },
+    { descType: TypeDescType.NativeSupportType, typeId: 1,  literal: 'bool',      byteSize: 1 },
+    { descType: TypeDescType.NativeSupportType, typeId: 2,  literal: 'int8',      byteSize: 1 },
+    { descType: TypeDescType.NativeSupportType, typeId: 3,  literal: 'uint8',     byteSize: 1 },
+    { descType: TypeDescType.NativeSupportType, typeId: 4,  literal: 'int16',     byteSize: 2 },
+    { descType: TypeDescType.NativeSupportType, typeId: 5,  literal: 'uint16',    byteSize: 2 },
+    { descType: TypeDescType.NativeSupportType, typeId: 6,  literal: 'int32',     byteSize: 4 },
+    { descType: TypeDescType.NativeSupportType, typeId: 7,  literal: 'uint32',    byteSize: 4 },
+    { descType: TypeDescType.NativeSupportType, typeId: 8,  literal: 'float32',   byteSize: 4 },
+    { descType: TypeDescType.NativeSupportType, typeId: 9,  literal: 'int64',     byteSize: 8 },
+    { descType: TypeDescType.NativeSupportType, typeId: 10, literal: 'uint64',    byteSize: 8 },
+    { descType: TypeDescType.NativeSupportType, typeId: 11, literal: 'float64',   byteSize: 8 },
+    { descType: TypeDescType.NativeSupportType, typeId: 12, literal: 'string',    byteSize: 4 + 4 },
 ];
 
 export interface BaseDescription {
@@ -70,7 +70,7 @@ export interface BaseDescription {
 }
 
 export interface EnumDescription extends BaseDescription {
-    dataType: string;
+    dataType: NativeSupportType;
     valueTypes: {
         name: string;
         value: number;

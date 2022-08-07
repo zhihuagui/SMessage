@@ -128,20 +128,90 @@ export class SMessageCompiler {
 
         this.generateRawTypeMaps(objectDefs);
 
-        const retJson: SMessageSchemas = {
+        const currSchema: SMessageSchemas = {
             version: this._version,
             enumDefs: [],
             structDefs: [],
         };
         objectDefs.forEach((typedef) => {
             if (typedef.type === 'enum') {
-                retJson.enumDefs.push(this._enumDefToEnumDesc(typedef));
+                currSchema.enumDefs.push(this._enumDefToEnumDesc(typedef));
             } else if (typedef.type === 'struct') {
-                retJson.structDefs.push(this._structDefToStructDesc(typedef));
+                currSchema.structDefs.push(this._structDefToStructDesc(typedef));
             }
         });
 
-        return retJson;
+        this._analyseSizeForAllStruct(currSchema);
+
+        this._currentSchema = currSchema;
+    }
+
+    /**
+     * 以4字节对齐的方式，分析并写入struct类型
+     *
+     * @private
+     * @param {SMessageSchemas} msgs
+     * @memberof SMessageCompiler
+     */
+    private _analyseSizeForAllStruct(msgs: SMessageSchemas) {
+        const id2Types: Map<number, StructDescription | EnumDescription> = new Map();
+        msgs.enumDefs.forEach(ed => {
+            id2Types.set(ed.typeId, ed);
+        });
+        msgs.structDefs.forEach(sd => {
+            id2Types.set(sd.typeId, sd);
+        });
+
+        msgs.structDefs.forEach(sd => {
+            this._analyseStructDesc(sd, id2Types);
+        });
+    }
+
+    private _analyseStructDesc(sDesc: StructDescription, id2Types: Map<number, StructDescription | EnumDescription>): StructDescription {
+        const byteAlign = 4;
+        let byteSize = 0;
+        for (let i = 0; i < sDesc.members.length; i++) {
+            const member = sDesc.members[i];
+            const mtDesc = member.type;
+            if (mtDesc.descType === TypeDescType.NativeSupportType) {
+                const descByte = mtDesc.byteSize;
+                byteSize = this._increaseByteWithAlign(byteSize, descByte, Math.min(byteAlign, descByte));
+            } else if (mtDesc.descType === TypeDescType.MapType) {
+                /** MapType memory: |Offset-4-Byte| */
+                byteSize = this._increaseByteWithAlign(byteSize, 4, Math.min(byteAlign, 4));
+            } else if (mtDesc.descType === TypeDescType.ArrayType) {
+                /** ArrayType memory: |Offset-4-Byte| */
+                byteSize = this._increaseByteWithAlign(byteSize, 4, Math.min(byteAlign, 4));
+            } else if (mtDesc.descType === TypeDescType.CombineType) {
+                /** CombineType memory: |Offset-4-Byte| */
+                byteSize = this._increaseByteWithAlign(byteSize, 4, Math.min(byteAlign, 4));
+            } else if (mtDesc.descType === TypeDescType.UserDefType) {
+                const dTDesc = id2Types.get(mtDesc.typeId);
+                if (dTDesc && 'size' in dTDesc) {
+                    const arst = this._analyseStructDesc(dTDesc, id2Types);
+                    byteSize = this._increaseByteWithAlign(byteSize, arst.size, Math.min(byteAlign, 4));
+                } else if (dTDesc && 'dataType' in dTDesc) {
+                    byteSize = this._increaseByteWithAlign(byteSize, dTDesc.dataType.byteSize, Math.min(byteAlign, dTDesc.dataType.byteSize));
+                } else {
+                    throw new Error(`Unsupport type id: ${mtDesc.typeId}`);
+                }
+            } else {
+                throw new Error(`Error while deal the type: ${JSON.stringify(mtDesc)}`);
+            }
+        }
+        if (byteSize === 0) {
+            throw new Error(`Deal with type: ${sDesc.scope}:${sDesc.typeName} error.`);
+        }
+        sDesc.size = byteSize;
+        return sDesc;
+    }
+
+    private _increaseByteWithAlign(btSize: number, increase: number, alignSize: number) {
+        const remainder = btSize % alignSize;
+        if (remainder > 0) {
+            return btSize + alignSize - remainder + increase;
+        }
+        return btSize + increase;
     }
 
     private _structDefToStructDesc(structDef: StructTypeDef): StructDescription {
@@ -164,9 +234,13 @@ export class SMessageCompiler {
     }
 
     private _enumDefToEnumDesc(enumDef: EnumTypeDef): EnumDescription {
-        let dataType = 'int32';
+        let dataTypeStr = 'int32';
         if (enumDef.cst.children.enumDataType) {
-            dataType = enumDef.cst.children.enumDataType[0].children.Literal[0].image;
+            dataTypeStr = enumDef.cst.children.enumDataType[0].children.Literal[0].image;
+        }
+        const dataType = NativeSupportTypes.find((tp) => tp.literal === dataTypeStr);
+        if (!dataType || dataType.byteSize > 4) {
+            throw new Error(`The datatype ${dataTypeStr} cannot use as enum type.`);
         }
         const ret: EnumDescription = {
             typeId: enumDef.typeId,
@@ -402,6 +476,10 @@ export class SMessageCompiler {
                 });
             }
         });
+    }
+
+    public get currentSchema() {
+        return this._currentSchema;
     }
 
     private _rawTypeMapping: Map<string, RawTypeDef> = new Map();
