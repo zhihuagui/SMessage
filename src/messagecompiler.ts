@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import { IBaseType, IEnumDef, ISMSGParserResult, IStructDef, parseMIDL } from './parser';
 import {
     AllTypeDesc,
@@ -13,9 +12,10 @@ import {
     IUserDefTypeDesc,
     IArrayTypeDesc,
     MINUserDefTypeId,
+    PredefinedTypes,
 } from './msgschema';
 import { ICombineType as IParserCombineType } from './parser';
-import { isGraterThan } from './version';
+import { isGraterOrEqualThan } from './version';
 
 type EnumTypeDef = {
     type: 'enum';
@@ -139,7 +139,7 @@ export class SMessageCompiler {
             if (imports) {
                 imports.forEach((ipt) => {
                     const fromPkg = ipt.children.packageName[0].children.Literal.map((tk) => tk.image).join('.');
-                    let fromFile = pkg2file.get(fromPkg);
+                    const fromFile = pkg2file.get(fromPkg);
                     if (!fromFile) {
                         throw new Error(`Cannot find the package: ${fromPkg} in any file.`);
                     }
@@ -206,14 +206,26 @@ export class SMessageCompiler {
                 const descByte = mtDesc.byteSize;
                 byteSize = this._increaseByteWithAlign(byteSize, descByte, Math.min(byteAlign, descByte));
             } else if (mtDesc.descType === TypeDescType.MapType) {
-                /** MapType memory: |Offset-4-Byte| */
-                byteSize = this._increaseByteWithAlign(byteSize, 4, Math.min(byteAlign, 4));
+                const desc = PredefinedTypes.find(t => t.typeId === mtDesc.typeId);
+                if (!desc) {
+                    throw new Error('The mtDesc should be preDefined.');
+                }
+                const psByte = desc.preDefinedClass.prototype.byteLength;
+                byteSize = this._increaseByteWithAlign(byteSize, psByte, Math.min(byteAlign, psByte));
             } else if (mtDesc.descType === TypeDescType.ArrayType) {
-                /** ArrayType memory: |Offset-4-Byte| */
-                byteSize = this._increaseByteWithAlign(byteSize, 4, Math.min(byteAlign, 4));
+                const desc = PredefinedTypes.find(t => t.typeId === mtDesc.typeId);
+                if (!desc) {
+                    throw new Error('The mtDesc should be preDefined.');
+                }
+                const psByte = desc.preDefinedClass.prototype.byteLength;
+                byteSize = this._increaseByteWithAlign(byteSize, psByte, Math.min(byteAlign, psByte));
             } else if (mtDesc.descType === TypeDescType.CombineType) {
-                /** CombineType memory: |Offset-4-Byte| */
-                byteSize = this._increaseByteWithAlign(byteSize, 4, Math.min(byteAlign, 4));
+                const desc = PredefinedTypes.find(t => t.typeId === mtDesc.typeId);
+                if (!desc) {
+                    throw new Error('The mtDesc should be preDefined.');
+                }
+                const psByte = desc.preDefinedClass.prototype.byteLength;
+                byteSize = this._increaseByteWithAlign(byteSize, psByte, Math.min(byteAlign, psByte));
             } else if (mtDesc.descType === TypeDescType.UserDefType) {
                 const dTDesc = id2Types.get(mtDesc.typeId);
                 if (dTDesc && 'size' in dTDesc) {
@@ -391,7 +403,7 @@ export class SMessageCompiler {
         throw new Error(`The type: ${typeName} in file: ${scope} is undefined.`);
     }
 
-    private combineTypeToString(combType: IParserCombineType) {
+    private combineTypeToString(combType: IParserCombineType): string {
         const baseTypes = combType.children.baseType;
         const btypeStrs = baseTypes.map((btype) => {
             if ('Comma' in btype.children) {
@@ -446,7 +458,16 @@ export class SMessageCompiler {
                 }
             }
         }
-        if (!isGraterThan(this._version, this._prevSchema.version)) {
+
+        if (!this._prevSchema) {
+            this._prevSchema = {
+                version: '0.0.0',
+                enumDefs: [],
+                structDefs: [],
+            };
+        }
+
+        if (!isGraterOrEqualThan(this._version, this._prevSchema.version)) {
             throw new Error('Cannot generate new version not larger than prev generated.');
         }
 
@@ -515,8 +536,8 @@ export class SMessageCompiler {
     private _idlFiles: string[];
     private _fileNameToCst: Map<string, ISMSGParserResult> = new Map();
     private _historyFile?: string;
-    private _prevSchema: SMessageSchemas;
-    private _currentSchema: SMessageSchemas;
+    private _prevSchema: SMessageSchemas | undefined;
+    private _currentSchema: SMessageSchemas | undefined;
     private _maxTypeId: number = MINUserDefTypeId;
     private _scopeDefs: Map<string, (EnumDescription | StructDescription)[]> = new Map();
 }

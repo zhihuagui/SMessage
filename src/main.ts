@@ -55,5 +55,9 @@ if (dirWalker.getAllFiles().length === 0) {
 const compiler = new SMessageCompiler(dirWalker.getAllFiles(), option.outputVersion, dirWalker.hasHistory ? dirWalker.historyFileName : undefined);
 compiler.compileAllFiles();
 
+if (!compiler.currentSchema) {
+    throw new Error("The schema compile error.");
+}
+
 const gen = new TypescriptCodeGen(compiler.currentSchema, option.outputDir, dirWalker.historyFileName);
 gen.generate();

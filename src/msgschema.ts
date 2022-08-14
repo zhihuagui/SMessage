@@ -1,7 +1,9 @@
-export const MINUserDefTypeId = 64;
-export const CombineTypeId = 63 as const;
-export const MapTypeId = 62 as const;
+import { StructBase, StructCombine, StructMap, StructMultiArray, StructString } from "./runtime/structs";
+
 export const ArrayTypeId = 61 as const;
+export const MapTypeId = 62 as const;
+export const CombineTypeId = 63 as const;
+export const MINUserDefTypeId = 64;
 
 export enum TypeDescType {
     NativeSupportType,
@@ -19,6 +21,12 @@ export interface NativeSupportType extends ITypeDesc {
     descType: TypeDescType.NativeSupportType;
     literal: string;
     byteSize: number;
+}
+
+export interface PreDefinedStructType {
+    typeId: number;
+    preDefinedClassName: string;
+    preDefinedClass: typeof StructBase
 }
 
 export interface ICombineTypeDesc extends ITypeDesc {
@@ -61,6 +69,13 @@ export const NativeSupportTypes: NativeSupportType[] = [
     { descType: TypeDescType.NativeSupportType, typeId: 10, literal: 'uint64', byteSize: 8 },
     { descType: TypeDescType.NativeSupportType, typeId: 11, literal: 'float64', byteSize: 8 },
     { descType: TypeDescType.NativeSupportType, typeId: 12, literal: 'string', byteSize: 4 + 4 },
+];
+
+export const PredefinedTypes: PreDefinedStructType[] = [
+    { typeId: 12, preDefinedClass: StructString, preDefinedClassName: 'StructString' },
+    { typeId: ArrayTypeId, preDefinedClass: StructMultiArray, preDefinedClassName: 'StructMultiArray' },
+    { typeId: MapTypeId, preDefinedClass: StructMap, preDefinedClassName: 'StructMap' },
+    { typeId: CombineTypeId, preDefinedClass: StructCombine, preDefinedClassName: 'StructCombine' },
 ];
 
 export interface BaseDescription {

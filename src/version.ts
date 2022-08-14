@@ -8,7 +8,10 @@ export function versionStrToNums(vstr: string) {
     throw new Error('Version must have format: [uint16].[uint16].[uint16]');
 }
 
-export function isGraterThan(vstr: string, oriVstr: string) {
+export function isGraterOrEqualThan(vstr: string, oriVstr: string) {
+    if (vstr === oriVstr) {
+        return true;
+    }
     const curV = versionStrToNums(vstr);
     const preV = versionStrToNums(oriVstr);
     if (curV[0] > preV[0] || curV[1] > preV[1] || curV[2] > preV[2]) {

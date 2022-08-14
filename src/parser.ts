@@ -1,4 +1,4 @@
-import { createToken, CstParser, IToken, Lexer, tokenMatcher, CstNode } from 'chevrotain';
+import { createToken, CstNode, CstParser, IToken, Lexer, ParserMethod, tokenMatcher } from 'chevrotain';
 
 // ----------------- lexer -----------------
 const Package = createToken({ name: 'Package', pattern: /package/ });
@@ -91,7 +91,8 @@ class SMSGParser extends CstParser {
     constructor() {
         super(allTokens);
 
-        const $ = this;
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        const $ = this as unknown as (SMSGParser & {[key: string]: ParserMethod<unknown[], CstNode>});
 
         $.RULE('MidlFile', () => {
             $.MANY(() => {
@@ -379,11 +380,11 @@ export interface IStructDef {
 }
 
 export function parseMIDL(text: string) {
-    const parser = new SMSGParser();
+    const parser = new SMSGParser() as unknown as (SMSGParser & {[key: string]: ParserMethod<unknown[], CstNode>});
     const lexResult = SMSGLexer.tokenize(text);
     parser.input = lexResult.tokens;
 
-    const cst: ISMSGParserResult = parser['MidlFile']();
+    const cst = parser['MidlFile']() as ISMSGParserResult;
 
     return {
         cst,
