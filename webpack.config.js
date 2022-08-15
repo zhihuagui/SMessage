@@ -20,16 +20,10 @@ const config = {
     },
     module: {
         rules: [{
-            test: /\.(ts|js)x?$/i,
+            test: /\.tsx?$/i,
             exclude: /node_modules/,
             use: {
-                loader: "babel-loader",
-                options: {
-                    presets: [
-                        "@babel/preset-env",
-                        "@babel/preset-typescript",
-                    ],
-                },
+                loader: "ts-loader"
             },
         }, {
             test: /\.css$/i,

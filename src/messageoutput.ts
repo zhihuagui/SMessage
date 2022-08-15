@@ -22,7 +22,7 @@ export class OutputGenerator {
             odir = path.join(odir, subScopes[i]);
             const exist = fs.existsSync(odir);
             if (!exist) {
-                fs.mkdirSync(odir);
+                fs.mkdirSync(odir, { recursive: true });
             }
         }
 

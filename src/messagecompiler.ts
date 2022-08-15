@@ -129,11 +129,11 @@ export class SMessageCompiler {
                         scope,
                         typeId: this._getAdditionalRawType({ name: structName, scope }),
                     });
-                    stuts.children.memberDefine.forEach((memdef) => {
-                        const memName = memdef.children.Literal[0].image;
-                        const memStr = this.combineTypeToString(memdef.children.combineType[0]);
-                        console.log(`memName: ${memName}, memtype: ${memStr}`);
-                    });
+                    // stuts.children.memberDefine.forEach((memdef) => {
+                    //     const memName = memdef.children.Literal[0].image;
+                    //     const memStr = this.combineTypeToString(memdef.children.combineType[0]);
+                    //     console.log(`memName: ${memName}, memtype: ${memStr}`);
+                    // });
                 });
             }
             if (imports) {
