@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { SMessageSchemas } from './msgschema';
+import { AllTypeDesc, SMessageSchemas, TypeDescType } from './msgschema';
 
 export class OutputGenerator {
     constructor(schema: SMessageSchemas, outDir: string, historyJson: string) {
@@ -28,6 +28,16 @@ export class OutputGenerator {
 
         const fileName = path.join(odir, `${last}.${extStr}`);
         fs.writeFileSync(fileName, str);
+    }
+
+    protected copyFile(srcFile: string, target: string) {
+        const opath = path.join(this._outDir, target);
+        const spath = path.join('src', srcFile);
+        fs.copyFileSync(spath, opath);
+    }
+
+    protected getTypeSizeFromType(typeDesc: AllTypeDesc) {
+        if (typeDesc.descType === TypeDescType.NativeSupportType) {}
     }
 
     protected _schema: SMessageSchemas;

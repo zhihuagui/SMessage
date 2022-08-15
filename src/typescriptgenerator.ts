@@ -12,6 +12,7 @@ interface IScopeOutput {
 export class TypescriptCodeGen extends OutputGenerator {
     public override generate(): void {
         const scopeString: { [key: string]: IScopeOutput } = {};
+        this.copyFile('runtime/structs.ts', 'basestructs.ts');
 
         this._schema.enumDefs.forEach((edesc) => {
             const enumStr = this._generateEnumDef(edesc);
@@ -37,7 +38,7 @@ export class TypescriptCodeGen extends OutputGenerator {
             Object.keys(imports).forEach((iscpe) => {
                 /* 基础的struct定义在..的scope内,文件名base */
                 if (iscpe === '..') {
-                    const repath = path.relative(currDir.join('/'), 'base').replace(/\\/g, '/');
+                    const repath = path.relative(currDir.join('/'), 'basestructs').replace(/\\/g, '/');
                     importStr += `import {${[...imports[iscpe]].join(', ')}} from '${repath}';\n`;
                 } else {
                     const isplits = iscpe.split('.');
@@ -80,9 +81,7 @@ ${edesc.valueTypes
             let memStr = '';
             switch (memdec.type.descType) {
             case TypeDescType.ArrayType:
-                if (memdec.type.arrayDims > 1) {
-
-                }
+                const mulAName = `StructMultiArray${memdec.type.arrayDims}_${this.getTypeSizeFromType(memdec.type.baseType)}`;
                 scopeOut.imports['..'].add(structArrayName);
                 memStr = `
     public get ${memdec.name}() {
