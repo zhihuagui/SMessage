@@ -86,7 +86,7 @@ ${edesc.valueTypes
                 memStr = `
     public get ${memdec.name}() {
         if (!this.#${memdec.name}) {
-            this.#${memdec.name} = new StructMultiArray(this._buffer, this._offset + ${currOffset});
+            this.#${memdec.name} = new ${mulAName}(this._buffer, this._offset + ${currOffset});
         }
         return this.#${memdec.name};
     }

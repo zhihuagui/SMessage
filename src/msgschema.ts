@@ -1,4 +1,4 @@
-import { StructBase, StructCombine, StructMap, StructMultiArray, StructString } from "./runtime/structs";
+import { StructBase, StructCombine, StructMap, StructMultiArray, StructString } from './runtime/structs';
 
 export const ArrayTypeId = 61 as const;
 export const MapTypeId = 62 as const;

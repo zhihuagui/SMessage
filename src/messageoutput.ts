@@ -1,12 +1,38 @@
 import fs from 'fs';
 import path from 'path';
-import { AllTypeDesc, SMessageSchemas, TypeDescType } from './msgschema';
+import { AllTypeDesc, SMessageSchemas, NativeSupportTypes, PredefinedTypes } from './msgschema';
 
 export class OutputGenerator {
     constructor(schema: SMessageSchemas, outDir: string, historyJson: string) {
         this._schema = schema;
         this._outDir = outDir;
         this._historyJson = historyJson;
+
+        NativeSupportTypes.forEach((nst) => {
+            if (this._idToDesp.has(nst.typeId)) {
+                throw new Error('Duplicate typeId detected.');
+            }
+            this._idToDesp.set(nst.typeId, nst.byteSize);
+        });
+
+        PredefinedTypes.forEach((pdt) => {
+            this._idToDesp.set(pdt.typeId, pdt.preDefinedClass.prototype.byteLength);
+        });
+
+        this._schema.enumDefs.forEach((eds) => {
+            if (this._idToDesp.has(eds.typeId)) {
+                throw new Error('Duplicate typeId detected.');
+            }
+            this._idToDesp.set(eds.typeId, eds.dataType.byteSize);
+        });
+
+        this._schema.structDefs.forEach((sds) => {
+            if (this._idToDesp.has(sds.typeId)) {
+                throw new Error('Duplicate typeId detected.');
+            }
+
+            this._idToDesp.set(sds.typeId, sds.size);
+        });
     }
 
     public generate() {
@@ -37,10 +63,15 @@ export class OutputGenerator {
     }
 
     protected getTypeSizeFromType(typeDesc: AllTypeDesc) {
-        if (typeDesc.descType === TypeDescType.NativeSupportType) {}
+        if (this._idToDesp.has(typeDesc.typeId)) {
+            return this._idToDesp.get(typeDesc.typeId);
+        }
+        throw new Error('Cannot find the type.');
     }
 
     protected _schema: SMessageSchemas;
     protected _outDir: string;
     private _historyJson: string;
+
+    private _idToDesp: Map<number, number> = new Map();
 }

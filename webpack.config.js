@@ -5,32 +5,35 @@ const {
 
 /** @type {Configuration} */
 const config = {
-    mode: "development",
+    mode: 'development',
     target: 'node',
     entry: {
-        main: './src/main.ts'
+        main: './src/main.ts',
     },
     output: {
         path: path.resolve(__dirname, './dist'),
         filename: `[name].js`,
-        publicPath: ''
+        publicPath: '',
     },
     resolve: {
-        extensions: [".tsx", ".ts", ".js"],
+        extensions: ['.tsx', '.ts', '.js'],
     },
     module: {
-        rules: [{
-            test: /\.tsx?$/i,
-            exclude: /node_modules/,
-            use: {
-                loader: "ts-loader"
+        rules: [
+            {
+                test: /\.tsx?$/i,
+                exclude: /node_modules/,
+                use: {
+                    loader: 'ts-loader',
+                },
             },
-        }, {
-            test: /\.css$/i,
-            use: ["style-loader", "css-loader"],
-        }, ],
+            {
+                test: /\.css$/i,
+                use: ['style-loader', 'css-loader'],
+            },
+        ],
     },
-    devtool: "inline-source-map",
+    devtool: 'inline-source-map',
 };
 
 module.exports = config;

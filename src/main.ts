@@ -56,7 +56,7 @@ const compiler = new SMessageCompiler(dirWalker.getAllFiles(), option.outputVers
 compiler.compileAllFiles();
 
 if (!compiler.currentSchema) {
-    throw new Error("The schema compile error.");
+    throw new Error('The schema compile error.');
 }
 
 const gen = new TypescriptCodeGen(compiler.currentSchema, option.outputDir, dirWalker.historyFileName);

@@ -7,6 +7,7 @@ module.exports = {
         'no-use-before-define': 'off',
         '@typescript-eslint/no-use-before-define': ['error', { ignoreTypeReferences: true }],
         'import/prefer-default-export': 'off',
+        quotes: ['error', 'single', { allowTemplateLiterals: true }],
     },
     settings: {
         'import/resolver': {
