@@ -23,6 +23,13 @@ export interface NativeSupportType extends ITypeDesc {
     byteSize: number;
 }
 
+export interface IAccessoryType {
+    typeId: number;
+    relyTypes: number[];
+    typeName: string;
+    scope: string;
+}
+
 export interface PreDefinedStructType {
     typeId: number;
     preDefinedClassName: string;
@@ -33,6 +40,7 @@ export interface ICombineTypeDesc extends ITypeDesc {
     descType: TypeDescType.CombineType;
     typeId: typeof CombineTypeId;
     types: Exclude<AllTypeDesc, ICombineTypeDesc>[];
+    accessory?: IAccessoryType;
 }
 
 export interface IArrayTypeDesc extends ITypeDesc {
@@ -40,6 +48,7 @@ export interface IArrayTypeDesc extends ITypeDesc {
     typeId: typeof ArrayTypeId;
     baseType: AllTypeDesc;
     arrayDims: number;
+    accessory?: IAccessoryType;
 }
 
 export interface IMapTypeDesc extends ITypeDesc {
@@ -47,6 +56,7 @@ export interface IMapTypeDesc extends ITypeDesc {
     typeId: typeof MapTypeId;
     keyType: NativeSupportType;
     valueType: AllTypeDesc;
+    accessory?: IAccessoryType;
 }
 
 export interface IUserDefTypeDesc extends ITypeDesc {

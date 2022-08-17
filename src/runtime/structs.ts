@@ -1,4 +1,3 @@
-import { TextDecoder, TextEncoder } from 'util';
 
 function copyArrayBuffer(src: ArrayBuffer, soffset: number, target: ArrayBuffer, toffset: number, length: number) {
     const srcDV = new DataView(src);

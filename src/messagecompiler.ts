@@ -13,6 +13,7 @@ import {
     IArrayTypeDesc,
     MINUserDefTypeId,
     PredefinedTypes,
+    IAccessoryType,
 } from './msgschema';
 import { ICombineType as IParserCombineType } from './parser';
 import { isGraterOrEqualThan } from './version';
@@ -530,7 +531,87 @@ export class SMessageCompiler {
         return this._currentSchema;
     }
 
+    private _generateAccessoryType(type: IArrayTypeDesc | IMapTypeDesc | ICombineTypeDesc, currScope: string) {
+        let ret: IAccessoryType;
+        if (type.descType === TypeDescType.ArrayType) {
+            const dim = type.arrayDims;
+            const btype = this._getInstancedTypeId(type.baseType, currScope);
+            const typeName = `MA_${dim}_${btype}`;
+            const astruct = this._accessoryStructs.get(typeName);
+            if (astruct) {
+                if (astruct.scope !== currScope) {
+                    astruct.scope = '';
+                }
+                return astruct.typeId;
+            }
+            const typeid = ++this._maxTypeId;
+            ret = {
+                typeId: typeid,
+                typeName,
+                relyTypes: [btype],
+                scope: currScope,
+            };
+            this._accessoryStructs.set(typeName, ret);
+            return typeid;
+        } else if (type.descType === TypeDescType.MapType) {
+            const ktype = this._getInstancedTypeId(type.keyType, currScope);
+            const vtype = this._getInstancedTypeId(type.valueType, currScope);
+            const typeName = `MP_${ktype}_${vtype}`;
+            const astruct = this._accessoryStructs.get(typeName);
+            if (astruct) {
+                if (astruct.scope !== currScope) {
+                    astruct.scope = '';
+                }
+                return astruct.typeId;
+            }
+            const typeid = ++this._maxTypeId;
+            ret = {
+                typeId: typeid,
+                typeName,
+                relyTypes: [ktype, vtype],
+                scope: currScope,
+            };
+            this._accessoryStructs.set(typeName, ret);
+            return typeid;
+        } else if (type.descType === TypeDescType.CombineType) {
+            const ctypes = type.types.map((tp) => {
+                return this._getInstancedTypeId(tp, currScope);
+            });
+            ctypes.sort();
+            const typeName = `CB${ctypes.join('_')}`;
+            const astruct = this._accessoryStructs.get(typeName);
+            if (astruct) {
+                if (astruct.scope !== currScope) {
+                    astruct.scope = '';
+                }
+                return astruct.typeId;
+            }
+            const typeid = ++this._maxTypeId;
+            ret = {
+                typeId: typeid,
+                typeName,
+                relyTypes: ctypes,
+                scope: currScope,
+            };
+            this._accessoryStructs.set(typeName, ret);
+            return typeid;
+        }
+
+        throw new Error('Unsupport accessory type.');
+    }
+
+    private _getInstancedTypeId(type: AllTypeDesc, currScope: string) {
+        if (type.descType === TypeDescType.NativeSupportType || type.descType === TypeDescType.UserDefType) {
+            return type.typeId;
+        } else if (type.descType === TypeDescType.ArrayType || type.descType === TypeDescType.MapType || type.descType === TypeDescType.CombineType) {
+            return this._generateAccessoryType(type, currScope);
+        }
+
+        throw new Error('Cannot get instanced typeId.');
+    }
+
     private _rawTypeMapping: Map<string, RawTypeDef> = new Map();
+    private _accessoryStructs: Map<string, IAccessoryType> = new Map();
 
     private _version: string;
     private _idlFiles: string[];

@@ -2,6 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import { AllTypeDesc, SMessageSchemas, NativeSupportTypes, PredefinedTypes } from './msgschema';
 
+export interface IStructScope {
+    typeId: number;
+    relayTypeIds: number[];
+    scopeName: string;
+}
+
 export class OutputGenerator {
     constructor(schema: SMessageSchemas, outDir: string, historyJson: string) {
         this._schema = schema;

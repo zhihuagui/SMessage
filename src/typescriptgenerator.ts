@@ -137,7 +137,7 @@ export class ${sdesc.typeName} extends ${structBaseName} {
             const stryctByte = parseInt(nameparts[2], 10);
 
             const outStr = `
-export class ${name} extends StructMultiArray {
+export class ${name} extends StructMultiArray {geometry library c++
     public get dims() { return ${dims}; }
     public get dataBytes() { return ${stryctByte}; }
 }
@@ -145,4 +145,6 @@ export class ${name} extends StructMultiArray {
             return outStr;
         }
     }
+
+
 }
