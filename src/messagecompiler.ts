@@ -213,6 +213,8 @@ export class SMessageCompiler {
                 }
                 const psByte = desc.preDefinedClass.prototype.byteLength;
                 byteSize = this._increaseByteWithAlign(byteSize, psByte, Math.min(byteAlign, psByte));
+                const insId = this._generateAccessoryType(mtDesc, sDesc.scope);
+                mtDesc.accessory = this._instId2Structs.get(insId);
             } else if (mtDesc.descType === TypeDescType.ArrayType) {
                 const desc = PredefinedTypes.find(t => t.typeId === mtDesc.typeId);
                 if (!desc) {
@@ -220,6 +222,8 @@ export class SMessageCompiler {
                 }
                 const psByte = desc.preDefinedClass.prototype.byteLength;
                 byteSize = this._increaseByteWithAlign(byteSize, psByte, Math.min(byteAlign, psByte));
+                const insId = this._generateAccessoryType(mtDesc, sDesc.scope);
+                mtDesc.accessory = this._instId2Structs.get(insId);
             } else if (mtDesc.descType === TypeDescType.CombineType) {
                 const desc = PredefinedTypes.find(t => t.typeId === mtDesc.typeId);
                 if (!desc) {
@@ -227,6 +231,8 @@ export class SMessageCompiler {
                 }
                 const psByte = desc.preDefinedClass.prototype.byteLength;
                 byteSize = this._increaseByteWithAlign(byteSize, psByte, Math.min(byteAlign, psByte));
+                const insId = this._generateAccessoryType(mtDesc, sDesc.scope);
+                mtDesc.accessory = this._instId2Structs.get(insId);
             } else if (mtDesc.descType === TypeDescType.UserDefType) {
                 const dTDesc = id2Types.get(mtDesc.typeId);
                 if (dTDesc && 'size' in dTDesc) {
@@ -551,6 +557,7 @@ export class SMessageCompiler {
                 relyTypes: [btype],
                 scope: currScope,
             };
+            this._instId2Structs.set(typeid, ret);
             this._accessoryStructs.set(typeName, ret);
             return typeid;
         } else if (type.descType === TypeDescType.MapType) {
@@ -571,6 +578,7 @@ export class SMessageCompiler {
                 relyTypes: [ktype, vtype],
                 scope: currScope,
             };
+            this._instId2Structs.set(typeid, ret);
             this._accessoryStructs.set(typeName, ret);
             return typeid;
         } else if (type.descType === TypeDescType.CombineType) {
@@ -593,6 +601,7 @@ export class SMessageCompiler {
                 relyTypes: ctypes,
                 scope: currScope,
             };
+            this._instId2Structs.set(typeid, ret);
             this._accessoryStructs.set(typeName, ret);
             return typeid;
         }
@@ -612,6 +621,7 @@ export class SMessageCompiler {
 
     private _rawTypeMapping: Map<string, RawTypeDef> = new Map();
     private _accessoryStructs: Map<string, IAccessoryType> = new Map();
+    private _instId2Structs: Map<number, IAccessoryType> = new Map();
 
     private _version: string;
     private _idlFiles: string[];
