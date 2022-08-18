@@ -13,7 +13,7 @@ import {
     IArrayTypeDesc,
     MINUserDefTypeId,
     PredefinedTypes,
-    IAccessoryType,
+    IAccessoryDesc,
 } from './msgschema';
 import { ICombineType as IParserCombineType } from './parser';
 import { isGraterOrEqualThan } from './version';
@@ -545,28 +545,36 @@ export class SMessageCompiler {
     }
 
     private _generateAccessoryType(type: IArrayTypeDesc | IMapTypeDesc | ICombineTypeDesc, currScope: string) {
-        let ret: IAccessoryType;
+        let ret: IAccessoryDesc;
         if (type.descType === TypeDescType.ArrayType) {
             const dim = type.arrayDims;
             const btype = this._getInstancedTypeId(type.baseType, currScope);
-            const typeName = `MA_${dim}_${btype}`;
-            const astruct = this._accessoryStructs.get(typeName);
-            if (astruct) {
-                if (astruct.scope !== currScope) {
-                    astruct.scope = '';
+            let typeId = -1;
+            for (let i = 1; i <= dim; i++) {
+                const typeName = `MA_${i}_${btype}`;
+                const prevType = i === 1 ? btype : this._accessoryStructs.get(`MA_${i-1}_${btype}`)?.typeId;
+                if (!prevType) {
+                    throw new Error('Cannot trigger this.');
                 }
-                return astruct.typeId;
+                const astruct = this._accessoryStructs.get(typeName);
+                if (!astruct) {
+                    typeId = ++this._maxTypeId;
+                    const sacc: IAccessoryDesc = {
+                        typeId: typeId,
+                        typeName: typeName,
+                        relyTypes: [prevType],
+                        scope: currScope,
+                    };
+                    this._instId2Structs.set(typeId, sacc);
+                    this._accessoryStructs.set(typeName, sacc);
+                } else {
+                    if (astruct.scope !== currScope) {
+                        astruct.scope = '';
+                    }
+                    typeId = astruct.typeId;
+                }
             }
-            const typeid = ++this._maxTypeId;
-            ret = {
-                typeId: typeid,
-                typeName,
-                relyTypes: [btype],
-                scope: currScope,
-            };
-            this._instId2Structs.set(typeid, ret);
-            this._accessoryStructs.set(typeName, ret);
-            return typeid;
+            return typeId;
         } else if (type.descType === TypeDescType.MapType) {
             const ktype = this._getInstancedTypeId(type.keyType, currScope);
             const vtype = this._getInstancedTypeId(type.valueType, currScope);
@@ -627,8 +635,8 @@ export class SMessageCompiler {
     }
 
     private _rawTypeMapping: Map<string, RawTypeDef> = new Map();
-    private _accessoryStructs: Map<string, IAccessoryType> = new Map();
-    private _instId2Structs: Map<number, IAccessoryType> = new Map();
+    private _accessoryStructs: Map<string, IAccessoryDesc> = new Map();
+    private _instId2Structs: Map<number, IAccessoryDesc> = new Map();
 
     private _version: string;
     private _idlFiles: string[];

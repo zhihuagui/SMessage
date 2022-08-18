@@ -14,7 +14,7 @@ export class TypescriptCodeGen extends OutputGenerator {
         const scopeString: { [key: string]: IScopeOutput } = {};
         this.copyFile('runtime/structs.ts', 'basestructs.ts');
 
-        this._schema.enumDefs.forEach((edesc) => {
+        this.schema.enumDefs.forEach((edesc) => {
             const enumStr = this._generateEnumDef(edesc);
             if (!scopeString[edesc.scope]) {
                 scopeString[edesc.scope] = {imports : {}, contents: ''};
@@ -22,7 +22,7 @@ export class TypescriptCodeGen extends OutputGenerator {
             scopeString[edesc.scope].contents += enumStr;
         });
 
-        this._schema.structDefs.forEach((sdesc) => {
+        this.schema.structDefs.forEach((sdesc) => {
             const scope = sdesc.scope;
             if (!scopeString[scope]) {
                 scopeString[scope] = {imports : {}, contents: ''};
@@ -50,6 +50,10 @@ export class TypescriptCodeGen extends OutputGenerator {
         });
 
         super.generate();
+    }
+
+    private analyseDependence() {
+        // 分析出先初始化哪些struct
     }
 
     private _generateEnumDef(edesc: EnumDescription) {
@@ -81,7 +85,7 @@ ${edesc.valueTypes
             let memStr = '';
             switch (memdec.type.descType) {
             case TypeDescType.ArrayType:
-                const mulAName = `StructMultiArray${memdec.type.arrayDims}_${this.getTypeSizeFromType(memdec.type.baseType)}`;
+                const mulAName = `MA_${memdec.type.arrayDims}_${this.getTypeSizeFromType(memdec.type.baseType)}`;
                 scopeOut.imports['..'].add(structArrayName);
                 memStr = `
     public get ${memdec.name}() {
@@ -120,6 +124,9 @@ export class ${sdesc.typeName} extends ${structBaseName} {
     }
 
     public gcStruct() {}
+
+    public buildSelf() {
+    }
 }
         `;
 

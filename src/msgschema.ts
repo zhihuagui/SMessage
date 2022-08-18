@@ -23,7 +23,7 @@ export interface NativeSupportType extends ITypeDesc {
     byteSize: number;
 }
 
-export interface IAccessoryType {
+export interface IAccessoryDesc {
     typeId: number;
     relyTypes: number[];
     typeName: string;
@@ -40,7 +40,7 @@ export interface ICombineTypeDesc extends ITypeDesc {
     descType: TypeDescType.CombineType;
     typeId: typeof CombineTypeId;
     types: Exclude<AllTypeDesc, ICombineTypeDesc>[];
-    accessory?: IAccessoryType;
+    accessory?: IAccessoryDesc;
 }
 
 export interface IArrayTypeDesc extends ITypeDesc {
@@ -48,7 +48,7 @@ export interface IArrayTypeDesc extends ITypeDesc {
     typeId: typeof ArrayTypeId;
     baseType: AllTypeDesc;
     arrayDims: number;
-    accessory?: IAccessoryType;
+    accessory?: IAccessoryDesc;
 }
 
 export interface IMapTypeDesc extends ITypeDesc {
@@ -56,7 +56,7 @@ export interface IMapTypeDesc extends ITypeDesc {
     typeId: typeof MapTypeId;
     keyType: NativeSupportType;
     valueType: AllTypeDesc;
-    accessory?: IAccessoryType;
+    accessory?: IAccessoryDesc;
 }
 
 export interface IUserDefTypeDesc extends ITypeDesc {
@@ -114,5 +114,5 @@ export interface SMessageSchemas {
     version: string;
     structDefs: StructDescription[];
     enumDefs: EnumDescription[];
-    accessories: IAccessoryType[];
+    accessories: IAccessoryDesc[];
 }

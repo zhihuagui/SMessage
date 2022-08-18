@@ -1,55 +1,75 @@
 import fs from 'fs';
 import path from 'path';
-import { AllTypeDesc, SMessageSchemas, NativeSupportTypes, PredefinedTypes } from './msgschema';
+import { AllTypeDesc, SMessageSchemas, NativeSupportTypes, PredefinedTypes, StructDescription, EnumDescription, IAccessoryDesc, TypeDescType } from './msgschema';
 
-export interface IStructScope {
-    typeId: number;
-    relayTypeIds: number[];
-    scopeName: string;
+export enum OutPutType {
+    Enum = 1,
+    Struct,
+    AccessoryStruct,
 }
+
 
 export class OutputGenerator {
     constructor(schema: SMessageSchemas, outDir: string, historyJson: string) {
-        this._schema = schema;
-        this._outDir = outDir;
+        this.schema = schema;
+        this.outDir = outDir;
         this._historyJson = historyJson;
 
         NativeSupportTypes.forEach((nst) => {
-            if (this._idToDesp.has(nst.typeId)) {
+            if (this._idToBytesize.has(nst.typeId)) {
                 throw new Error('Duplicate typeId detected.');
             }
-            this._idToDesp.set(nst.typeId, nst.byteSize);
+            this._idToBytesize.set(nst.typeId, nst.byteSize);
         });
 
         PredefinedTypes.forEach((pdt) => {
-            this._idToDesp.set(pdt.typeId, pdt.preDefinedClass.prototype.byteLength);
+            this._idToBytesize.set(pdt.typeId, pdt.preDefinedClass.prototype.byteLength);
         });
 
-        this._schema.enumDefs.forEach((eds) => {
-            if (this._idToDesp.has(eds.typeId)) {
+        this.schema.enumDefs.forEach((eds) => {
+            if (this._idToBytesize.has(eds.typeId)) {
                 throw new Error('Duplicate typeId detected.');
             }
-            this._idToDesp.set(eds.typeId, eds.dataType.byteSize);
+            this._idToBytesize.set(eds.typeId, eds.dataType.byteSize);
+            this.idToDesc.set(eds.typeId, eds);
+            this.idToDependence.set(eds.typeId, []);
         });
 
-        this._schema.structDefs.forEach((sds) => {
-            if (this._idToDesp.has(sds.typeId)) {
+        this.schema.structDefs.forEach((sds) => {
+            if (this._idToBytesize.has(sds.typeId)) {
                 throw new Error('Duplicate typeId detected.');
             }
 
-            this._idToDesp.set(sds.typeId, sds.size);
+            this._idToBytesize.set(sds.typeId, sds.size);
+            this.idToDesc.set(sds.typeId, sds);
+            const depends: Set<number> = new Set();
+            sds.members.forEach(vlue => {
+                if (vlue.type.descType === TypeDescType.CombineType || vlue.type.descType === TypeDescType.ArrayType || vlue.type.descType === TypeDescType.MapType) {
+                    if (vlue.type.accessory) {
+                        depends.add(vlue.type.accessory.typeId);
+                    }
+                } if (vlue.type.descType === TypeDescType.UserDefType) {
+                    depends.add(vlue.type.typeId);
+                }
+            });
+            this.idToDependence.set(sds.typeId, [...depends]);
+        });
+
+        this.schema.accessories.forEach((acs) => {
+            this.idToDesc.set(acs.typeId, acs);
+            this.idToDependence.set(acs.typeId, acs.relyTypes);
         });
     }
 
     public generate() {
-        fs.writeFileSync(this._historyJson, JSON.stringify(this._schema));
+        fs.writeFileSync(this._historyJson, JSON.stringify(this.schema));
     }
 
     protected writeScopeString(str: string, scope: string, extStr: string) {
         const subScopes = scope.split('.');
         const last = subScopes[subScopes.length - 1];
 
-        let odir = this._outDir;
+        let odir = this.outDir;
         for (let i = 0; i < subScopes.length - 1; i++) {
             odir = path.join(odir, subScopes[i]);
             const exist = fs.existsSync(odir);
@@ -63,21 +83,23 @@ export class OutputGenerator {
     }
 
     protected copyFile(srcFile: string, target: string) {
-        const opath = path.join(this._outDir, target);
+        const opath = path.join(this.outDir, target);
         const spath = path.join('src', srcFile);
         fs.copyFileSync(spath, opath);
     }
 
     protected getTypeSizeFromType(typeDesc: AllTypeDesc) {
-        if (this._idToDesp.has(typeDesc.typeId)) {
-            return this._idToDesp.get(typeDesc.typeId);
+        if (this._idToBytesize.has(typeDesc.typeId)) {
+            return this._idToBytesize.get(typeDesc.typeId);
         }
         throw new Error('Cannot find the type.');
     }
 
-    protected _schema: SMessageSchemas;
-    protected _outDir: string;
-    private _historyJson: string;
+    protected schema: SMessageSchemas;
+    protected outDir: string;
+    protected idToDesc: Map<number, StructDescription | EnumDescription | IAccessoryDesc> = new Map();
+    protected idToDependence: Map<number, number[]> = new Map();
 
-    private _idToDesp: Map<number, number> = new Map();
+    private _historyJson: string;
+    private _idToBytesize: Map<number, number> = new Map();
 }
