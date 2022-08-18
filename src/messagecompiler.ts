@@ -162,6 +162,7 @@ export class SMessageCompiler {
             version: this._version,
             enumDefs: [],
             structDefs: [],
+            accessories: [],
         };
         objectDefs.forEach((typedef) => {
             if (typedef.type === 'enum') {
@@ -172,6 +173,10 @@ export class SMessageCompiler {
         });
 
         this._analyseSizeForAllStruct(currSchema);
+
+        this._instId2Structs.forEach((v) => {
+            currSchema.accessories.push(v);
+        });
 
         this._currentSchema = currSchema;
     }
@@ -451,6 +456,7 @@ export class SMessageCompiler {
                 version: '0.0.0',
                 enumDefs: [],
                 structDefs: [],
+                accessories: [],
             };
             return;
         }
@@ -471,6 +477,7 @@ export class SMessageCompiler {
                 version: '0.0.0',
                 enumDefs: [],
                 structDefs: [],
+                accessories: [],
             };
         }
 

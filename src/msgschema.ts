@@ -114,4 +114,5 @@ export interface SMessageSchemas {
     version: string;
     structDefs: StructDescription[];
     enumDefs: EnumDescription[];
+    accessories: IAccessoryType[];
 }

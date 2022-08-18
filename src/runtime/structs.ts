@@ -90,19 +90,6 @@ export abstract class StructBase {
         this._dataView.setInt32(8, nxtOffset, true);
     }
 
-    public updateCapacity(nxtSize: number) {
-        if (this._offset !== 12) {
-            throw new Error('Cannot update capacity in a non-root struct.');
-        }
-        const newBuffer = new ArrayBuffer(nxtSize);
-        if (this.trashLength / this.nextAvailableOffset > trashToGCRatio) {
-            throw new Error('GC shold be impled.');
-        } else {
-            copyArrayBuffer(this._buffer, 0, newBuffer, 0, this.nextAvailableOffset);
-            this._sBuffer.reset(newBuffer);
-        }
-    }
-
     public abstract get typeId(): number;
 
     public abstract get byteLength(): number;
@@ -115,6 +102,55 @@ export abstract class StructBase {
     protected get _buffer() {
         return this._sBuffer._buffer;
     }
+
+    protected updateCapacity(minAddCapacity: number) {
+        if (this._offset !== 12) {
+            throw new Error('Cannot update capacity in a non-root struct.');
+        }
+
+        if (this.trashLength / this.nextAvailableOffset > trashToGCRatio) {
+            throw new Error('GC shold be impled.');
+        } else {
+            const nxtSize = Math.max(this._buffer.byteLength * 2, this._buffer.byteLength + Math.floor(this._buffer.byteLength * 0.5) + minAddCapacity);
+            const newBuffer = new ArrayBuffer(nxtSize);
+            copyArrayBuffer(this._buffer, 0, newBuffer, 0, this.nextAvailableOffset);
+            this._sBuffer.reset(newBuffer);
+        }
+    }
+
+    protected extendSubBuffer(offset: number, originLength: number, toLength: number) {
+        if (originLength >= toLength) {
+            return offset;
+        }
+        let nxtavail = this.nextAvailableOffset;
+        if (offset + originLength === nxtavail) {
+            nxtavail += toLength - originLength;
+            if (nxtavail > this._sBuffer._buffer.byteLength) {
+                this.updateCapacity(nxtavail - this._sBuffer._buffer.byteLength);
+                this.nextAvailableOffset = nxtavail;
+            }
+            return offset;
+        } else {
+            const ret = nxtavail;
+            nxtavail += toLength;
+            if (nxtavail > this._sBuffer._buffer.byteLength) {
+                this.updateCapacity(nxtavail - this._sBuffer._buffer.byteLength);
+                this.nextAvailableOffset = nxtavail;
+            }
+            return ret;
+        }
+    }
+
+    protected createSubBuffer(byteLength: number) {
+        const curOffset = this.nextAvailableOffset;
+        const nxtavail = curOffset + byteLength;
+        if (nxtavail > this._sBuffer._buffer.byteLength) {
+            this.updateCapacity(nxtavail - this._sBuffer._buffer.byteLength);
+            this.nextAvailableOffset = nxtavail;
+        }
+        return curOffset;
+    }
+
     protected _sBuffer: StructBuffer;
     protected _offset: number;
 }
@@ -146,34 +182,33 @@ export class StructString extends StructBase {
     public setString(str: string) {
         const buffer = utf8Encoder.encode(str);
         const dataOffset = this._dataView.getInt32(this._offset, true);
-        if (buffer.length < 8) {
+        if (buffer.length < 12) {
             if (dataOffset < 0) {
                 this._dataView.setInt8(this._offset, buffer.length | 0x80);
                 copyArrayBuffer(buffer, 0, this._buffer, this._offset + 1, buffer.length);
             } else {
-                const len = this._dataView.getInt32(this._offset + 4, true);
-                this.trashLength = this.trashLength + len;
-                this._dataView.setInt8(this._offset, buffer.length | 0x80);
-                copyArrayBuffer(buffer, 0, this._buffer, this._offset + 1, buffer.length);
+                this._dataView.setInt32(this._offset + 4, buffer.length, true);
+                copyArrayBuffer(buffer, 0, this._buffer, dataOffset, buffer.length);
             }
         } else {
             if (dataOffset < 0) {
-                this._dataView.setInt32(this._offset, this.nextAvailableOffset, true);
+                const ndoffset = this.createSubBuffer(buffer.length);
+                this._dataView.setInt32(this._offset, ndoffset, true);
                 this._dataView.setInt32(this._offset + 4, buffer.length, true);
-                copyArrayBuffer(buffer, 0, this._buffer, this.nextAvailableOffset, buffer.length);
-                this.nextAvailableOffset += buffer.length;
+                this._dataView.setInt32(this._offset + 8, buffer.length, true);
+                copyArrayBuffer(buffer, 0, this._buffer, ndoffset, buffer.length);
             } else {
-                const len = this._dataView.getInt32(this._offset + 4, true);
-                if (len > buffer.length) {
+                const cap = this._dataView.getInt32(this._offset + 8, true);
+                if (cap >= buffer.length) {
                     this._dataView.setInt32(this._offset + 4, buffer.length, true);
                     copyArrayBuffer(buffer, 0, this._buffer, dataOffset, this.length);
-                    this.trashLength += len - buffer.length;
                 } else {
-                    this._dataView.setInt32(this._offset, this.nextAvailableOffset, true);
+                    const ndoffset = this.extendSubBuffer(dataOffset, cap, buffer.length);
+                    this._dataView.setInt32(this._offset, ndoffset, true);
                     this._dataView.setInt32(this._offset + 4, buffer.length, true);
-                    copyArrayBuffer(buffer, 0, this._buffer, this.nextAvailableOffset, buffer.length);
-                    this.nextAvailableOffset += buffer.length;
-                    this.trashLength += len;
+                    this._dataView.setInt32(this._offset + 8, buffer.length, true);
+                    copyArrayBuffer(buffer, 0, this._buffer, ndoffset, buffer.length);
+                    this.trashLength += cap;
                 }
             }
         }
@@ -183,8 +218,18 @@ export class StructString extends StructBase {
         return 12;
     }
 
+    /**
+     * Memory structure:  
+     * `| data offset | str length | str capacity |`  
+     * or  
+     * `| 0b1 str len -- 1 byte | str Data -- 11 byte |`
+     *
+     * @readonly
+     * @type {number}
+     * @memberof StructString
+     */
     public get byteLength(): number {
-        return 8;
+        return 12;
     }
 
     public gcStruct(): void {
@@ -195,15 +240,15 @@ export class StructString extends StructBase {
 export abstract class StructMultiArray extends StructBase {
 
     public get size() {
-        return this._dataView.getInt32(this._offset, true);
-    }
-
-    public get capacity() {
         return this._dataView.getInt32(this._offset + 4, true);
     }
 
-    public get dataOffset() {
+    public get capacity() {
         return this._dataView.getInt32(this._offset + 8, true);
+    }
+
+    public get dataOffset() {
+        return this._dataView.getInt32(this._offset, true);
     }
 
     public abstract get dims(): number;
@@ -215,7 +260,8 @@ export abstract class StructMultiArray extends StructBase {
     }
 
     /**
-     * 4 byte: offset, 4 byte: capacity, 4 byte: length
+     * Memory structure:  
+     * `| data offset | firstDim len | firstDim cap |`
      *
      * @readonly
      * @memberof StructArray
@@ -228,7 +274,6 @@ export abstract class StructMultiArray extends StructBase {
         void(0);
     }
 }
-
 
 export class StructMap extends StructBase {
     public get size() {
