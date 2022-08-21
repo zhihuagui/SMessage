@@ -2,6 +2,7 @@ import path from 'path';
 import { OutputGenerator } from './messageoutput';
 import { EnumDescription, StructDescription, TypeDescType } from './msgschema';
 
+
 interface IScopeOutput {
     imports: {
         [scope: string]: Set<string>;
@@ -85,7 +86,7 @@ ${edesc.valueTypes
             let memStr = '';
             switch (memdec.type.descType) {
             case TypeDescType.ArrayType:
-                const mulAName = `MA_${memdec.type.arrayDims}_${this.getTypeSizeFromType(memdec.type.baseType)}`;
+                const mulAName = `MA_${memdec.type.arrayDims}_${this.getTypeSizeFromTypeId(memdec.type.baseType.typeId)}`;
                 scopeOut.imports['..'].add(structArrayName);
                 memStr = `
     public get ${memdec.name}() {
@@ -141,17 +142,50 @@ export class ${sdesc.typeName} extends ${structBaseName} {
         const nameparts = name.split('_');
         if (nameparts.length === 3) {
             const dims = parseInt(nameparts[1], 10);
-            const stryctByte = parseInt(nameparts[2], 10);
+            const baseTypeId = parseInt(nameparts[2], 10);
+            const structByte = this.getTypeSizeFromTypeId(baseTypeId);
+            const baseDesc = this.getDescByTypeId(baseTypeId);
 
             const outStr = `
-export class ${name} extends StructMultiArray {geometry library c++
+export class ${name} extends StructMultiArray {
     public get dims() { return ${dims}; }
-    public get dataBytes() { return ${stryctByte}; }
+    public get dataBytes() { return ${structByte}; }
+
+    public at(index: number): ${baseDesc.typeName} {
+        if (index < this.size) {
+            return Factory.create(${baseTypeId});
+        }
+        return undefined;
+    }
+
+    static registerFactory() {
+    }
 }
 `;
             return outStr;
         }
     }
 
+}
 
+import type { StructBase, StructBuffer, StructString } from './runtime/structs';
+
+type DerivedStructClass = {
+    new (buf: ArrayBuffer | StructBuffer, offset: number) : StructBase;
+}
+export class StructFactory {
+    public registerLoading(typeId: number, cls: DerivedStructClass) {
+        this._clasDefs.set(typeId, cls);
+    }
+
+    public create(typeId: 12, buf: ArrayBuffer | StructBuffer, offset: number): StructString;
+    public create(typeId: number, buf: ArrayBuffer | StructBuffer, offset: number): StructBase {
+        const clsDef = this._clasDefs.get(typeId);
+        if (!clsDef) {
+            throw new Error(`Cannot find the def of typeId: ${typeId}`)
+        }
+        return new clsDef(buf, offset);
+    }
+
+    private _clasDefs: Map<number, DerivedStructClass> = new Map();
 }
