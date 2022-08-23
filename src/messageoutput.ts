@@ -15,15 +15,16 @@ export class OutputGenerator {
         this.outDir = outDir;
         this._historyJson = historyJson;
 
-        NativeSupportTypes.forEach((nst) => {
-            if (this._idToBytesize.has(nst.typeId)) {
-                throw new Error('Duplicate typeId detected.');
-            }
-            this._idToBytesize.set(nst.typeId, nst.byteSize);
-        });
-
         PredefinedTypes.forEach((pdt) => {
             this._idToBytesize.set(pdt.typeId, pdt.preDefinedClass.prototype.byteLength);
+            this._idToClassName.set(pdt.typeId, pdt.preDefinedClassName);
+        });
+
+        NativeSupportTypes.forEach((nst) => {
+            this._idToBytesize.set(nst.typeId, nst.byteSize);
+            if (!this._idToClassName.has(nst.typeId)) {
+                this._idToClassName.set(nst.typeId, nst.literal);
+            }
         });
 
         this.schema.enumDefs.forEach((eds) => {
@@ -31,6 +32,7 @@ export class OutputGenerator {
                 throw new Error('Duplicate typeId detected.');
             }
             this._idToBytesize.set(eds.typeId, eds.dataType.byteSize);
+            this._idToClassName.set(eds.typeId, eds.typeName);
             this.idToDesc.set(eds.typeId, eds);
             this.idToDependence.set(eds.typeId, []);
         });
@@ -40,7 +42,8 @@ export class OutputGenerator {
                 throw new Error('Duplicate typeId detected.');
             }
 
-            this._idToBytesize.set(sds.typeId, sds.size);
+            this._idToBytesize.set(sds.typeId, sds.byteLength);
+            this._idToClassName.set(sds.typeId, sds.typeName);
             this.idToDesc.set(sds.typeId, sds);
             const depends: Set<number> = new Set();
             sds.members.forEach(vlue => {
@@ -58,6 +61,11 @@ export class OutputGenerator {
         });
 
         this.schema.accessories.forEach((acs) => {
+            if (this._idToBytesize.has(acs.typeId)) {
+                throw new Error('Duplicate typeId detected.');
+            }
+            this._idToBytesize.set(acs.typeId, acs.byteLength);
+            this._idToClassName.set(acs.typeId, acs.typeName);
             this.idToDesc.set(acs.typeId, acs);
             this.idToDependence.set(acs.typeId, acs.relyTypes.filter(id => id >= MINUserDefTypeId));
         });
@@ -86,10 +94,15 @@ export class OutputGenerator {
         fs.writeFileSync(fileName, str);
     }
 
-    protected copyFile(srcFile: string, target: string) {
+    protected copyFile(srcFile: string, target: string, prefix?: string, suffix?: string) {
         const opath = path.join(this.outDir, target);
         const spath = path.join('src', srcFile);
-        fs.copyFileSync(spath, opath);
+        if (!prefix && !suffix) {
+            fs.copyFileSync(spath, opath);
+        } else {
+            const fstr = fs.readFileSync(spath).toString();
+            fs.writeFileSync(opath, `${prefix ? prefix : ''}${fstr}\n${suffix ? suffix : ''}`);
+        }
     }
 
     protected getDescByTypeId(typeId: number) {
@@ -98,6 +111,14 @@ export class OutputGenerator {
             throw new Error(`The type ${typeId} has no desc.`);
         }
         return desc;
+    }
+
+    protected getTypeNameById(typeId: number) {
+        const tpName = this._idToClassName.get(typeId);
+        if (tpName) {
+            return tpName;
+        }
+        throw new Error('Cannot find the type.');
     }
 
     protected getTypeSizeFromTypeId(typeId: number) {
@@ -160,4 +181,5 @@ export class OutputGenerator {
 
     private _historyJson: string;
     private _idToBytesize: Map<number, number> = new Map();
+    private _idToClassName: Map<number, string> = new Map();
 }

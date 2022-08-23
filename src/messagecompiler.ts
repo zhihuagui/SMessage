@@ -17,6 +17,7 @@ import {
 } from './msgschema';
 import { ICombineType as IParserCombineType } from './parser';
 import { isGraterOrEqualThan } from './version';
+import { StructCombine, StructMap, StructMultiArray } from './runtime/structs';
 
 type EnumTypeDef = {
     type: 'enum';
@@ -240,9 +241,9 @@ export class SMessageCompiler {
                 mtDesc.accessory = this._instId2Structs.get(insId);
             } else if (mtDesc.descType === TypeDescType.UserDefType) {
                 const dTDesc = id2Types.get(mtDesc.typeId);
-                if (dTDesc && 'size' in dTDesc) {
+                if (dTDesc && 'byteLength' in dTDesc) {
                     const arst = this._analyseStructDesc(dTDesc, id2Types);
-                    byteSize = this._increaseByteWithAlign(byteSize, arst.size, Math.min(byteAlign, 4));
+                    byteSize = this._increaseByteWithAlign(byteSize, arst.byteLength, Math.min(byteAlign, 4));
                 } else if (dTDesc && 'dataType' in dTDesc) {
                     byteSize = this._increaseByteWithAlign(byteSize, dTDesc.dataType.byteSize, Math.min(byteAlign, dTDesc.dataType.byteSize));
                 } else {
@@ -255,7 +256,7 @@ export class SMessageCompiler {
         if (byteSize === 0) {
             throw new Error(`Deal with type: ${sDesc.scope}:${sDesc.typeName} error.`);
         }
-        sDesc.size = byteSize;
+        sDesc.byteLength = byteSize;
         return sDesc;
     }
 
@@ -269,10 +270,11 @@ export class SMessageCompiler {
 
     private _structDefToStructDesc(structDef: StructTypeDef): StructDescription {
         const ret: StructDescription = {
+            type: 'struct',
             typeId: structDef.typeId,
             scope: structDef.scope,
             typeName: structDef.name,
-            size: 0,
+            byteLength: 0,
             members: [],
         };
         structDef.cst.children.memberDefine.forEach((memberDef) => {
@@ -296,6 +298,7 @@ export class SMessageCompiler {
             throw new Error(`The datatype ${dataTypeStr} cannot use as enum type.`);
         }
         const ret: EnumDescription = {
+            type: 'enum',
             typeId: enumDef.typeId,
             scope: enumDef.scope,
             typeName: enumDef.name,
@@ -560,8 +563,10 @@ export class SMessageCompiler {
                 if (!astruct) {
                     typeId = ++this._maxTypeId;
                     const sacc: IAccessoryDesc = {
+                        type: 'multiArray',
                         typeId: typeId,
                         typeName: typeName,
+                        byteLength: StructMultiArray.prototype.byteLength,
                         relyTypes: [prevType],
                         scope: currScope,
                     };
@@ -588,8 +593,10 @@ export class SMessageCompiler {
             }
             const typeid = ++this._maxTypeId;
             ret = {
+                type: 'mapStruct',
                 typeId: typeid,
                 typeName,
+                byteLength: StructMap.prototype.byteLength,
                 relyTypes: [ktype, vtype],
                 scope: currScope,
             };
@@ -611,8 +618,10 @@ export class SMessageCompiler {
             }
             const typeid = ++this._maxTypeId;
             ret = {
+                type: 'combineType',
                 typeId: typeid,
                 typeName,
+                byteLength: StructCombine.prototype.byteLength,
                 relyTypes: ctypes,
                 scope: currScope,
             };

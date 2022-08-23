@@ -1,7 +1,6 @@
 import path from 'path';
 import { OutputGenerator } from './messageoutput';
-import { EnumDescription, StructDescription, TypeDescType } from './msgschema';
-
+import { EnumDescription, StringTypeId, StructDescription, TypeDescType } from './msgschema';
 
 interface IScopeOutput {
     imports: {
@@ -10,10 +9,26 @@ interface IScopeOutput {
     contents: string;
 }
 
+const literalToTypeName: {[key: string]: string} = {
+    bool: 'boolean',
+    int8: 'number',
+    uint8: 'number',
+    int16: 'number',
+    uint16: 'number',
+    int32: 'number',
+    uint32: 'number',
+    float32: 'number',
+    float64: 'number',
+    int64: 'number',
+    uint64: 'number',
+}
+
 export class TypescriptCodeGen extends OutputGenerator {
     public override generate(): void {
         const scopeString: { [key: string]: IScopeOutput } = {};
-        this.copyFile('runtime/structs.ts', 'basestructs.ts');
+        this.copyFile('runtime/structs.ts', 'basestructs.ts'
+            , `import { messageFactory } from './msgfactory';`
+            , `messageFactory.registerLoading(${StringTypeId}, StructString);`);
 
         this.schema.enumDefs.forEach((edesc) => {
             const enumStr = this._generateEnumDef(edesc);
@@ -50,6 +65,8 @@ export class TypescriptCodeGen extends OutputGenerator {
             this.writeScopeString(importStr + scopeString[scope].contents, scope, 'ts');
         });
 
+        this._generateMArrayStructs();
+        this._generateFactory();
         super.generate();
     }
 
@@ -121,7 +138,7 @@ export class ${sdesc.typeName} extends ${structBaseName} {
     }
 
     public get byteLength() {
-        return ${sdesc.size};
+        return ${sdesc.byteLength};
     }
 
     public gcStruct() {}
@@ -136,56 +153,87 @@ export class ${sdesc.typeName} extends ${structBaseName} {
 
     /**
      * Generate the array define.
-     * @param name StructMultiArray name, StructMultiArray_${Dims}_${StructByte}
      */
-    private _generateStructMArray(name: string) {
-        const nameparts = name.split('_');
-        if (nameparts.length === 3) {
-            const dims = parseInt(nameparts[1], 10);
-            const baseTypeId = parseInt(nameparts[2], 10);
-            const structByte = this.getTypeSizeFromTypeId(baseTypeId);
-            const baseDesc = this.getDescByTypeId(baseTypeId);
-
-            const outStr = `
-export class ${name} extends StructMultiArray {
+    private _generateMArrayStructs() {
+        const outLst: string[] = [];
+        this.idToDesc.forEach((desc) => {
+            if (desc.type === 'multiArray') {
+                const id = desc.typeId;
+                const nameparts = desc.typeName.split('_');
+                if (nameparts.length === 3) {
+                    const dims = parseInt(nameparts[1], 10);
+                    const baseTypeId = parseInt(nameparts[2], 10);
+                    const structByte = this.getTypeSizeFromTypeId(baseTypeId);
+                    let baseDesc = this.getTypeNameById(baseTypeId);
+                    if (baseDesc in literalToTypeName) {
+                        baseDesc = literalToTypeName[baseDesc];
+                    }
+        
+                    const outStr = `
+export class ${desc.typeName} extends StructMultiArray {
     public get dims() { return ${dims}; }
     public get dataBytes() { return ${structByte}; }
 
-    public at(index: number): ${baseDesc.typeName} {
+    public at(index: number): ${baseDesc} {
         if (index < this.size) {
-            return Factory.create(${baseTypeId});
+            return messageFactory.create(${baseTypeId}, this._sBuffer, this.dataOffset + ${structByte} * index);
         }
-        return undefined;
+        throw new Error('[Index Exceed], Get index in array error.')
     }
+
+    public get typeId() { return ${id}; }
 
     static registerFactory() {
+        messageFactory.registerLoading(${id}, ${desc.typeName});
     }
 }
+${desc.typeName}.registerFactory();
 `;
-            return outStr;
+                    outLst.push(outStr);
+                }
+            }
+        });
+        if (outLst.length === 0) {
+            return;
         }
+
+        const fileContents = `
+import { messageFactory } from './msgfactory';
+import { StructMultiArray } from './basestructs'
+${outLst.join('\n')}
+`;
+        this.writeScopeString(fileContents, 'multiarrays', 'ts');
     }
 
-}
-
-import type { StructBase, StructBuffer, StructString } from './runtime/structs';
+    private _generateFactory() {
+        const factoryContent = `
+import type { StructBase, StructBuffer, StructString } from './basestructs';
 
 type DerivedStructClass = {
     new (buf: ArrayBuffer | StructBuffer, offset: number) : StructBase;
 }
-export class StructFactory {
+class StructFactory {
     public registerLoading(typeId: number, cls: DerivedStructClass) {
         this._clasDefs.set(typeId, cls);
     }
 
-    public create(typeId: 12, buf: ArrayBuffer | StructBuffer, offset: number): StructString;
+${[{id: StringTypeId, cname: 'StructString'}].map(pair => `
+    public create(typeId: ${pair.id}, buf: ArrayBuffer | StructBuffer, offset: number): ${pair.cname};`).join('\n')}
     public create(typeId: number, buf: ArrayBuffer | StructBuffer, offset: number): StructBase {
         const clsDef = this._clasDefs.get(typeId);
         if (!clsDef) {
-            throw new Error(`Cannot find the def of typeId: ${typeId}`)
+            throw new Error(\`Cannot find the def of typeId: \${typeId}\`)
         }
         return new clsDef(buf, offset);
     }
 
     private _clasDefs: Map<number, DerivedStructClass> = new Map();
 }
+
+export const messageFactory = new StructFactory();
+`
+        this.writeScopeString(factoryContent, 'msgfactory', 'ts');
+    }
+
+}
+

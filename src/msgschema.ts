@@ -1,5 +1,6 @@
 import { StructBase, StructCombine, StructMap, StructMultiArray, StructString } from './runtime/structs';
 
+export const StringTypeId = 60 as const;
 export const ArrayTypeId = 61 as const;
 export const MapTypeId = 62 as const;
 export const CombineTypeId = 63 as const;
@@ -24,7 +25,9 @@ export interface NativeSupportType extends ITypeDesc {
 }
 
 export interface IAccessoryDesc {
+    type: 'multiArray' | 'mapStruct' | 'combineType';
     typeId: number;
+    byteLength: number;
     relyTypes: number[];
     typeName: string;
     scope: string;
@@ -78,11 +81,11 @@ export const NativeSupportTypes: NativeSupportType[] = [
     { descType: TypeDescType.NativeSupportType, typeId: 9, literal: 'int64', byteSize: 8 },
     { descType: TypeDescType.NativeSupportType, typeId: 10, literal: 'uint64', byteSize: 8 },
     { descType: TypeDescType.NativeSupportType, typeId: 11, literal: 'float64', byteSize: 8 },
-    { descType: TypeDescType.NativeSupportType, typeId: 12, literal: 'string', byteSize: 4 + 4 },
+    { descType: TypeDescType.NativeSupportType, typeId: StringTypeId, literal: 'string', byteSize: StructString.prototype.byteLength },
 ];
 
 export const PredefinedTypes: PreDefinedStructType[] = [
-    { typeId: 12, preDefinedClass: StructString, preDefinedClassName: 'StructString' },
+    { typeId: StringTypeId, preDefinedClass: StructString, preDefinedClassName: 'StructString' },
     { typeId: ArrayTypeId, preDefinedClass: StructMultiArray, preDefinedClassName: 'StructMultiArray' },
     { typeId: MapTypeId, preDefinedClass: StructMap, preDefinedClassName: 'StructMap' },
     { typeId: CombineTypeId, preDefinedClass: StructCombine, preDefinedClassName: 'StructCombine' },
@@ -95,6 +98,7 @@ export interface BaseDescription {
 }
 
 export interface EnumDescription extends BaseDescription {
+    type: 'enum';
     dataType: NativeSupportType;
     valueTypes: {
         name: string;
@@ -103,7 +107,8 @@ export interface EnumDescription extends BaseDescription {
 }
 
 export interface StructDescription extends BaseDescription {
-    size: number;
+    type: 'struct';
+    byteLength: number;
     members: {
         name: string;
         type: AllTypeDesc;

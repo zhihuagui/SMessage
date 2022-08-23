@@ -6,7 +6,8 @@
         "module": "ES6",
         "moduleResolution": "node",
         "strict": true,
-        "allowSyntheticDefaultImports": true
+        "allowSyntheticDefaultImports": true,
+        "sourceMap": true
     },
     "include": [
         "src/**/*"
