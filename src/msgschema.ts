@@ -1,5 +1,6 @@
 import { StructBase, StructCombine, StructMap, StructMultiArray, StructString } from './runtime/structs';
 
+export const StructBaseId = 59 as const;
 export const StringTypeId = 60 as const;
 export const ArrayTypeId = 61 as const;
 export const MapTypeId = 62 as const;
@@ -89,6 +90,7 @@ export const PredefinedTypes: PreDefinedStructType[] = [
     { typeId: ArrayTypeId, preDefinedClass: StructMultiArray, preDefinedClassName: 'StructMultiArray' },
     { typeId: MapTypeId, preDefinedClass: StructMap, preDefinedClassName: 'StructMap' },
     { typeId: CombineTypeId, preDefinedClass: StructCombine, preDefinedClassName: 'StructCombine' },
+    { typeId: StructBaseId, preDefinedClass: StructBase, preDefinedClassName: 'StructBase' },
 ];
 
 export interface BaseDescription {
