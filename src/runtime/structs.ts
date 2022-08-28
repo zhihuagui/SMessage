@@ -255,9 +255,7 @@ export abstract class StructMultiArray extends StructBase {
 
     public abstract get dataBytes(): number;
 
-    public get typeId(): number {
-        return 61;
-    }
+    public abstract get typeId(): number;
 
     /**
      * Memory structure:  
@@ -275,7 +273,7 @@ export abstract class StructMultiArray extends StructBase {
     }
 }
 
-export class StructMap extends StructBase {
+export abstract class StructMap extends StructBase {
     public get size() {
         return this._dataView.getInt32(this._offset, true);
     }
@@ -288,9 +286,7 @@ export class StructMap extends StructBase {
         return this._dataView.getInt32(this._offset + 8, true);
     }
 
-    public get typeId(): number {
-        return 62;
-    }
+    public abstract get typeId(): number;
 
     /**
      * 4 byte: offset, 4 byte: capacity, 4 byte: length
@@ -307,7 +303,7 @@ export class StructMap extends StructBase {
     }
 }
 
-export class StructCombine extends StructBase {
+export abstract class StructCombine extends StructBase {
 
     /**
      * Only one offset(Ptr) store in the array.
@@ -316,16 +312,14 @@ export class StructCombine extends StructBase {
      * @memberof StructCombine
      */
     public get dataOffset() {
-        return this._dataView.getInt32(this._offset, true);
+        return this._dataView.getInt32(this._offset + 4, true);
     }
 
     public get dataType() {
         return this._dataView.getInt32(this.dataOffset, true);
     }
 
-    public get typeId(): number {
-        return 63;
-    }
+    public abstract get typeId(): number;
 
     /**
      * The type store in the content of the Ptr.

@@ -608,7 +608,7 @@ export class SMessageCompiler {
                 return this._getInstancedTypeId(tp, currScope);
             });
             ctypes.sort();
-            const typeName = `CB${ctypes.join('_')}`;
+            const typeName = `CB_${ctypes.join('_')}`;
             const astruct = this._accessoryStructs.get(typeName);
             if (astruct) {
                 if (astruct.scope !== currScope) {

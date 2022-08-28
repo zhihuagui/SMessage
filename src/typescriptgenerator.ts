@@ -1,22 +1,23 @@
 import path from 'path';
 import { OutputGenerator } from './messageoutput';
-import { EnumDescription, StringTypeId, StructDescription, TypeDescType, IAccessoryDesc, ArrayTypeId, MapTypeId, CombineTypeId, StructBaseId } from './msgschema';
+import { EnumDescription, StringTypeId, StructDescription, NativeSupportTypes, TypeDescType, IAccessoryDesc, ArrayTypeId, MapTypeId, CombineTypeId, StructBaseId } from './msgschema';
 
-const literalToTypeName: {[key: string]: string} = {
-    bool: 'boolean',
-    int8: 'number',
-    uint8: 'number',
-    int16: 'number',
-    uint16: 'number',
-    int32: 'number',
-    uint32: 'number',
-    float32: 'number',
-    float64: 'number',
-    int64: 'number',
-    uint64: 'number',
+const literalToNativeTypeName: {[key: string]: { tsTypeName: string; bufViewGet: string }} = {
+    bool: { tsTypeName: 'boolean', bufViewGet: 'getUint8'},
+    int8: { tsTypeName: 'number', bufViewGet: 'getInt8'},
+    uint8: { tsTypeName: 'number', bufViewGet: 'getUint8'},
+    int16: { tsTypeName: 'number', bufViewGet: 'getInt16'},
+    uint16: { tsTypeName: 'number', bufViewGet: 'getUint16'},
+    int32: { tsTypeName: 'number', bufViewGet: 'getInt21'},
+    uint32: { tsTypeName: 'number', bufViewGet: 'getUint32'},
+    float32: { tsTypeName: 'number', bufViewGet: 'getFloat32'},
+    float64: { tsTypeName: 'number', bufViewGet: 'getFloat64'},
+    int64: { tsTypeName: 'bitint', bufViewGet: 'getBitInt64'},
+    uint64: { tsTypeName: 'bitint', bufViewGet: 'getBigUint64'},
 }
 
 interface IScopeContext {
+    type: 'enum' | 'struct';
     typeId: number;
     relys: number[];
     context: string;
@@ -99,6 +100,17 @@ export class TypescriptCodeGen extends OutputGenerator {
                     }
                 }
             });
+
+            let hasStruct = false;
+            rst.contextLst.some((sctx) => {
+                if (sctx.type === 'struct') {
+                    hasStruct = true;
+                }
+            });
+            if (hasStruct) {
+                importFromScope['msgfactory'] = new Set(['messageFactory']);
+            }
+
             Object.keys(importFromScope).forEach((tscope) => {
                 const currDir = scope.split('.');
                 currDir.pop();
@@ -130,6 +142,7 @@ ${edesc.valueTypes
 }
 `;
         return {
+            type: 'enum',
             typeName: edesc.typeName,
             relys: [],
             context: outStr,
@@ -196,6 +209,7 @@ export class ${sdesc.typeName} extends ${structBaseName} {
         `;
 
         return {
+            type: 'struct',
             typeName: sdesc.typeName,
             context: structCtx,
             scope: sdesc.scope,
@@ -216,24 +230,24 @@ export class ${sdesc.typeName} extends ${structBaseName} {
                 const baseTypeId = parseInt(nameparts[2], 10);
                 const structByte = this.getTypeSizeFromTypeId(baseTypeId);
                 let baseDesc = this.getTypeNameById(baseTypeId);
-                if (baseDesc in literalToTypeName) {
-                    baseDesc = literalToTypeName[baseDesc];
+                if (baseDesc in literalToNativeTypeName) {
+                    baseDesc = literalToNativeTypeName[baseDesc].tsTypeName;
                 }
                 brely = ArrayTypeId;
 
                 ctxString = `
 export class ${desc.typeName} extends StructMultiArray {
-public get dims() { return ${dims}; }
-public get dataBytes() { return ${structByte}; }
+    public get dims() { return ${dims}; }
+    public get dataBytes() { return ${structByte}; }
 
-public at(index: number): ${baseDesc} {
-    if (index < this.size) {
-        return messageFactory.create(${baseTypeId}, this._sBuffer, this.dataOffset + ${structByte} * index);
+    public at(index: number): ${baseDesc} {
+        if (index < this.size) {
+            return ${this._getValueFromId(baseTypeId, `this.dataOffset + ${structByte} * index`)};
+        }
+        throw new Error('[Index Exceed], Get index in array error.')
     }
-    throw new Error('[Index Exceed], Get index in array error.')
-}
 
-public get typeId() { return ${id}; }
+    public get typeId() { return ${id}; }
 
 }
 messageFactory.registerLoading(${id}, ${desc.typeName});
@@ -241,23 +255,78 @@ messageFactory.registerLoading(${id}, ${desc.typeName});
                 scope = 'multiarrays';
             }
         } else if (desc.type === 'mapStruct') {
+            const id = desc.typeId;
+            const nameparts = desc.typeName.split('_');
+            if (nameparts.length !== 3) {
+                throw new Error('Map must have 3 parts.');
+            }
+            const keyTypeId = parseInt(nameparts[1]);
+            const valueTypeId = parseInt(nameparts[2]);
+            const structByte = this.getTypeSizeFromTypeId(valueTypeId);
+            let baseDesc = this.getTypeNameById(valueTypeId);
+            if (baseDesc in literalToNativeTypeName) {
+                baseDesc = literalToNativeTypeName[baseDesc].tsTypeName;
+            }
+            let getValueStr = '';
+            if (keyTypeId === StringTypeId) {
+                getValueStr = `    public get(type: string): ${baseDesc} {
+        const offset = this.getStringOffset();
+        return ${this._getValueFromId(valueTypeId, 'offset')};
+    }`;
+            } else {
+                getValueStr = `    public get(type: number): ${baseDesc} {
+        const offset = this.getNumberOffset();
+        return ${this._getValueFromId(valueTypeId, 'offset')};
+    }`;
+            }
+
             brely = MapTypeId;
             const mapCtx = `
 export class ${desc.typeName} extends StructMap {
+    public get dataBytes() {
+        return ${structByte};
+    }
+
+    public get typeId() {
+        return ${id};
+    }
+
+${getValueStr}
 
 }`;
             scope = 'mapstructs';
             ctxString = mapCtx;
         } else if (desc.type === 'combineType') {
+            const nameparts = desc.typeName.split('_');
+            const candidateTypes = nameparts.slice(1);
             brely = CombineTypeId;
             ctxString = `
 export class ${desc.typeName} extends StructCombine {
-    public;
+    public get typeId() {
+        return ${desc.typeId};
+    }
+
+    public get totalIndex() {
+        return ${candidateTypes.length};
+    }
+
+    public getValue() {
+        switch(this._sBuffer._dataView.getUint8(this._offset)) {
+${candidateTypes.map((tyStr, index) => {
+    const typeId = parseInt(tyStr);
+    return `            case ${index + 1}:
+                return ${this._getValueFromId(typeId, `this.`)};`;
+}).join('\n')}
+            default:
+                throw new Error('Unexpect combine typeId.');
+        }
+    }
 }`;
             scope = 'combinestructs';
 
         }
         return {
+            type: 'struct',
             typeName: desc.typeName,
             scope: scope,
             relys: [brely, ...desc.relyTypes],
@@ -303,25 +372,43 @@ type DerivedStructClass = {
 }
 class StructFactory {
     public registerLoading(typeId: number, cls: DerivedStructClass) {
-        this._clasDefs.set(typeId, cls);
+        this._clasDefs[typeId] = cls;
     }
 
 ${itCNames.map(pair => `
     public create(typeId: ${pair.id}, buf: ArrayBuffer | StructBuffer, offset: number): ${pair.cname};`).join('')}
     public create(typeId: number, buf: ArrayBuffer | StructBuffer, offset: number): StructBase {
-        const clsDef = this._clasDefs.get(typeId);
+        const clsDef = this._clasDefs[typeId];
         if (!clsDef) {
             throw new Error(\`Cannot find the def of typeId: \${typeId}\`)
         }
         return new clsDef(buf, offset);
     }
 
-    private _clasDefs: Map<number, DerivedStructClass> = new Map();
+    private _clasDefs: DerivedStructClass[] = [];
 }
 
 export const messageFactory = new StructFactory();
 `
         this.writeScopeString(factoryContent, 'msgfactory', 'ts');
+    }
+
+    private _getValueFromId(typeId: number, offsetStr: string) {
+        const nativeST = NativeSupportTypes.find((tp) => {
+            return tp.typeId === typeId;
+        });
+        if (nativeST) {
+            if (nativeST.literal in literalToNativeTypeName) {
+                if ('bool' === nativeST.literal) {
+                    return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewGet}(${offsetStr}) !== 0;`;
+                } else if ('int8' === nativeST.literal || 'uint8' === nativeST.literal) {
+                    return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewGet}(${offsetStr});`;
+                } else {
+                    return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewGet}(${offsetStr}, true);`;
+                }
+            }
+        }
+        return `messageFactory.create(${typeId}, this._sBuffer, ${offsetStr});`
     }
 
     private _typeDefs: Map<number, IScopeContext> = new Map();
