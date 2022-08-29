@@ -227,7 +227,7 @@ export class ${sdesc.typeName} extends ${structBaseName} {
             const nameparts = desc.typeName.split('_');
             if (nameparts.length === 3) {
                 const dims = parseInt(nameparts[1], 10);
-                const baseTypeId = parseInt(nameparts[2], 10);
+                const baseTypeId = desc.relyTypes.length === 1 ? desc.relyTypes[0] : parseInt(nameparts[2], 10);
                 const structByte = this.getTypeSizeFromTypeId(baseTypeId);
                 let baseDesc = this.getTypeNameById(baseTypeId);
                 if (baseDesc in literalToNativeTypeName) {
