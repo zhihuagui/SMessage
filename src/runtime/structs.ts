@@ -151,6 +151,10 @@ export abstract class StructBase {
         return curOffset;
     }
 
+    protected updateOffset(newOffset: number) {
+        this._offset = newOffset;
+    }
+
     protected _sBuffer: StructBuffer;
     protected _offset: number;
 }
@@ -176,6 +180,17 @@ export class StructString extends StructBase {
             const len = this._dataView.getInt8(this._offset) & 0x7F;
             const u8ary = new Uint8Array(this._buffer, this._offset + 1, len);
             return utf8Decoder.decode(u8ary);
+        }
+    }
+
+    public getStringBuffer() {
+        const dataOffset = this._dataView.getInt32(this._offset, true);
+        if (dataOffset > 0) {
+            const len = this._dataView.getInt32(this._offset + 4, true);
+            return new Uint8Array(this._buffer, dataOffset, len);
+        } else {
+            const len = this._dataView.getInt8(this._offset) & 0x7F;
+            return new Uint8Array(this._buffer, this._offset + 1, len);
         }
     }
 
@@ -288,6 +303,45 @@ export abstract class StructMap extends StructBase {
 
     public abstract get typeId(): number;
 
+    public abstract get perKeyByte(): number;
+
+    public abstract get perValueByte(): number;
+
+    public binSearchLocation(key: string) {
+        const dataOffset = this.dataOffset;
+        let mk = 0;
+        let mx = this.size;
+        while(mx - mk > 1) {
+            const nxt = Math.floor((mx - mk) / 2);
+            const compareOffset = dataOffset + nxt * (this.perKeyByte + this.perValueByte);
+            const kstr = new StructString(this._sBuffer, compareOffset);
+            const rst = this.compareString(kstr, key);
+            if (rst === 0) {
+                return compareOffset;
+            } else if (rst < 0) {
+                mx = nxt - 1;
+            } else {
+                mk = nxt + 1;
+            }
+        }
+        let compareOffset = dataOffset + mx * (this.perKeyByte + this.perValueByte);
+        let kstr = new StructString(this._sBuffer, compareOffset);
+        let rst = this.compareString(kstr, key);
+        if (rst === 0) {
+            return compareOffset;
+        }
+        if (mk == mx) {
+            return undefined;
+        }
+        compareOffset -= this.perKeyByte + this.perValueByte;
+        kstr = new StructString(this._sBuffer, compareOffset);
+        rst = this.compareString(kstr, key);
+        if (rst === 0) {
+            return compareOffset;
+        }
+        return undefined;
+    }
+
     /**
      * 4 byte: offset, 4 byte: capacity, 4 byte: length
      *
@@ -300,6 +354,31 @@ export abstract class StructMap extends StructBase {
 
     public gcStruct(): void {
         void(0);
+    }
+
+    public compareString(left: string | StructString, right: string | StructString) {
+        const bufLeft = typeof left === 'string' ? utf8Encoder.encode(left) : left.getStringBuffer();
+        const bufRight = typeof right === 'string' ? utf8Encoder.encode(right) : right.getStringBuffer();
+        const compareLen = Math.min(bufLeft.length, bufRight.length);
+        for (let i = 0; i < compareLen; i++) {
+            if (bufLeft[i] < bufRight[i]) {
+                return 1;
+            } else if (bufLeft[i] > bufRight[i]) {
+                return -1;
+            }
+        }
+        if (bufLeft.length < bufRight.length) {
+            return 1;
+        } else if (bufLeft.length > bufRight.length) {
+            return -1;
+        }
+        return 0;
+    }
+
+    public compareNumber(left: number, right: number) {
+        if (left < right) { return 1; }
+        else if (left > right) { return -1; }
+        return 0;
     }
 }
 
