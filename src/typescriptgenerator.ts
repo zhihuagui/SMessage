@@ -206,6 +206,10 @@ ${edesc.valueTypes
 
         const structCtx = `
 export class ${sdesc.typeName} extends ${structBaseName} {
+    public static typeId(): ${sdesc.typeId} {
+        return ${sdesc.typeId};
+    }
+
     ${memsStr}
 
     public get typeId() {
@@ -221,7 +225,8 @@ export class ${sdesc.typeName} extends ${structBaseName} {
     public buildSelf() {
     }
 }
-        `;
+messageFactory.registerLoading(${sdesc.typeId}, ${sdesc.typeName});
+`;
 
         return {
             type: 'struct',
@@ -325,7 +330,10 @@ ${searchMethod}
 
 ${getValueStr}
 
-}`;
+}
+messageFactory.registerLoading(${id}, ${desc.typeName});
+
+`;
             scope = 'mapstructs';
             ctxString = mapCtx;
         } else if (desc.type === 'combineType') {
@@ -387,7 +395,10 @@ ${candidateTypes.map((tpStr, index) => {
         return ${this._getValueFromId(typeId, offsetStr)};
     }`;
 }).join('\n')}
-}`;
+}
+messageFactory.registerLoading(${desc.typeId}, ${desc.typeName});
+
+`;
             scope = 'combinestructs';
 
         }
