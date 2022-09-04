@@ -2,18 +2,21 @@ import path from 'path';
 import { OutputGenerator } from './messageoutput';
 import { EnumDescription, StringTypeId, StructDescription, NativeSupportTypes, TypeDescType, IAccessoryDesc, ArrayTypeId, MapTypeId, CombineTypeId, StructBaseId } from './msgschema';
 
-const literalToNativeTypeName: {[key: string]: { tsTypeName: string; bufViewGet: string }} = {
-    bool: { tsTypeName: 'boolean', bufViewGet: 'getUint8'},
-    int8: { tsTypeName: 'number', bufViewGet: 'getInt8'},
-    uint8: { tsTypeName: 'number', bufViewGet: 'getUint8'},
-    int16: { tsTypeName: 'number', bufViewGet: 'getInt16'},
-    uint16: { tsTypeName: 'number', bufViewGet: 'getUint16'},
-    int32: { tsTypeName: 'number', bufViewGet: 'getInt21'},
-    uint32: { tsTypeName: 'number', bufViewGet: 'getUint32'},
-    float32: { tsTypeName: 'number', bufViewGet: 'getFloat32'},
-    float64: { tsTypeName: 'number', bufViewGet: 'getFloat64'},
-    int64: { tsTypeName: 'bitint', bufViewGet: 'getBitInt64'},
-    uint64: { tsTypeName: 'bitint', bufViewGet: 'getBigUint64'},
+interface NativeTypeGenDesc {
+    [key: string]: { tsTypeName: string; bufViewGet: string; bufViewSet: string };
+}
+const literalToNativeTypeName: NativeTypeGenDesc = {
+    bool: { tsTypeName: 'boolean', bufViewGet: 'getUint8', bufViewSet: 'setUint8'},
+    int8: { tsTypeName: 'number', bufViewGet: 'getInt8', bufViewSet: 'setInt8'},
+    uint8: { tsTypeName: 'number', bufViewGet: 'getUint8', bufViewSet: 'setUint8'},
+    int16: { tsTypeName: 'number', bufViewGet: 'getInt16', bufViewSet: 'setInt16'},
+    uint16: { tsTypeName: 'number', bufViewGet: 'getUint16', bufViewSet: 'setUint16'},
+    int32: { tsTypeName: 'number', bufViewGet: 'getInt32', bufViewSet: 'setInt32'},
+    uint32: { tsTypeName: 'number', bufViewGet: 'getUint32', bufViewSet: 'setUint32'},
+    float32: { tsTypeName: 'number', bufViewGet: 'getFloat32', bufViewSet: 'setFloat32'},
+    float64: { tsTypeName: 'number', bufViewGet: 'getFloat64', bufViewSet: 'setFloat64'},
+    int64: { tsTypeName: 'bitint', bufViewGet: 'getBitInt64', bufViewSet: 'setBitInt64'},
+    uint64: { tsTypeName: 'bitint', bufViewGet: 'getBigUint64', bufViewSet: 'setBigUint64'},
 }
 
 interface IScopeContext {
@@ -165,6 +168,8 @@ ${edesc.valueTypes
                     throw new Error('Must have accessory type!!!');
                 }
                 memStr = `
+    #${memdec.name}: ${this.getTypeNameById(accessoryType.typeId)} | undefined;
+
     public get ${memdec.name}() {
         if (!this.#${memdec.name}) {
             this.#${memdec.name} = messageFactory.create(${accessoryType.typeId}, this._buffer, this._offset + ${currOffset});
@@ -180,6 +185,16 @@ ${edesc.valueTypes
                 relys.add(memdec.type.typeId);
                 break;
             case TypeDescType.NativeSupportType:
+                memsStr += `
+    public get ${memdec.name}() {
+        return ${this._getValueFromId(memdec.type.typeId, `${currOffset}`)};
+    }
+
+    public set ${memdec.name}(value: ${this.getTypeNameById(memdec.type.typeId)}) {
+        ${this._setValueForId(memdec.type.typeId, `${currOffset}`, 'value')};
+    }
+                `;
+                currOffset += memdec.type.byteSize;
                 break;
             case TypeDescType.CombineType:
                 break;
@@ -262,34 +277,57 @@ messageFactory.registerLoading(${id}, ${desc.typeName});
             }
             const keyTypeId = parseInt(nameparts[1]);
             const valueTypeId = parseInt(nameparts[2]);
-            const structByte = this.getTypeSizeFromTypeId(valueTypeId);
+            const keyByte = this.getTypeSizeFromTypeId(keyTypeId);
+            const ktypeName = this.getTypeNameById(keyTypeId);
+            const kTsTypeName = (ktypeName in literalToNativeTypeName) ? literalToNativeTypeName[ktypeName].tsTypeName : ktypeName;
+            const valueByte = this.getTypeSizeFromTypeId(valueTypeId);
             let baseDesc = this.getTypeNameById(valueTypeId);
             if (baseDesc in literalToNativeTypeName) {
                 baseDesc = literalToNativeTypeName[baseDesc].tsTypeName;
             }
             let getValueStr = '';
             if (keyTypeId === StringTypeId) {
-                getValueStr = `    public get(type: string): ${baseDesc} {
-        const offset = this.getStringOffset();
+                getValueStr = `    public get(key: string): ${baseDesc} | undefined {
+        const offset = this.binSearchLocation(key);
+        if (!offset) {
+            return undefined;
+        }
         return ${this._getValueFromId(valueTypeId, 'offset')};
     }`;
             } else {
-                getValueStr = `    public get(type: number): ${baseDesc} {
-        const offset = this.getNumberOffset();
+                getValueStr = `    public get(key: number): ${baseDesc} | undefined {
+        const offset = this.binSearchLocation(key);
+        if (!offset) {
+            return undefined;
+        }
         return ${this._getValueFromId(valueTypeId, 'offset')};
     }`;
+            }
+
+            let searchMethod: string;
+            if (kTsTypeName === 'number' || kTsTypeName === 'StructString') {
+                searchMethod = this._generateBinSearch(kTsTypeName, ktypeName);
+            } else {
+                throw new Error('Ts Key type only support string or number.');
             }
 
             brely = MapTypeId;
             const mapCtx = `
 export class ${desc.typeName} extends StructMap {
-    public get dataBytes() {
-        return ${structByte};
-    }
 
-    public get typeId() {
+    public get typeId(): number {
         return ${id};
     }
+
+    public get keyByte(): number {
+        return ${keyByte};
+    }
+
+    public get valueByte() {
+        return ${valueByte};
+    }
+
+${searchMethod}
 
 ${getValueStr}
 
@@ -314,13 +352,47 @@ export class ${desc.typeName} extends StructCombine {
         switch(this._sBuffer._dataView.getUint8(this._offset)) {
 ${candidateTypes.map((tyStr, index) => {
     const typeId = parseInt(tyStr);
+    const tpSize = this.getTypeSizeFromTypeId(typeId);
+    if (!tpSize) {
+        throw new Error('Must should be found size.');
+    }
+    const offsetStr = tpSize <= 4 ? 'this._offset + 4' : 'this._sBuffer._dataView.getInt32(this._offset + 4, true)';
     return `            case ${index + 1}:
-                return ${this._getValueFromId(typeId, `this.`)};`;
+                return ${this._getValueFromId(typeId, offsetStr)};`;
 }).join('\n')}
             default:
                 throw new Error('Unexpect combine typeId.');
         }
     }
+
+${candidateTypes.map((tpStr, index) => {
+    const typeId = parseInt(tpStr);
+    const tpName = this.getTypeNameById(typeId);
+    const upperFirstName = tpName.at(0)?.toUpperCase() + tpName.slice(1);
+    const tsTpName = tpName in literalToNativeTypeName ? literalToNativeTypeName[tpName].tsTypeName : tpName;
+    const tpSize = this.getTypeSizeFromTypeId(typeId);
+    let offsetStr: string;
+    let setStr: string;
+    if (tpSize && tpSize <= 4) {
+        offsetStr = 'this._offset + 4';
+        setStr = this._setValueForId(typeId, 'this._offset + 4', 'value');
+    } else {
+        setStr = `const bufAddr = this.createSubBuffer(${tpSize});
+        this._sBuffer._dataView.setInt32(this._offset + 4, bufAddr);
+        ${this._setValueForId(typeId, 'bufAddr', 'value')}`;
+        offsetStr = 'this._sBuffer._dataView.getInt32(this._offset + 4, true)';
+    }
+    return `    public set${upperFirstName}(value: ${tsTpName}) {
+        this._sBuffer._dataView.setUint8(this._offset, ${index});
+        ${setStr};
+    }
+    public is${upperFirstName}() {
+        return this._sBuffer._dataView.getUint8(this._offset) === ${index};
+    }
+    public get${upperFirstName}() {
+        return ${this._getValueFromId(typeId, offsetStr)};
+    }`;
+}).join('\n')}
 }`;
             scope = 'combinestructs';
 
@@ -400,15 +472,141 @@ export const messageFactory = new StructFactory();
         if (nativeST) {
             if (nativeST.literal in literalToNativeTypeName) {
                 if ('bool' === nativeST.literal) {
-                    return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewGet}(${offsetStr}) !== 0;`;
+                    return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewGet}(${offsetStr}) !== 0`;
                 } else if ('int8' === nativeST.literal || 'uint8' === nativeST.literal) {
-                    return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewGet}(${offsetStr});`;
+                    return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewGet}(${offsetStr})`;
                 } else {
-                    return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewGet}(${offsetStr}, true);`;
+                    return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewGet}(${offsetStr}, true)`;
                 }
             }
         }
-        return `messageFactory.create(${typeId}, this._sBuffer, ${offsetStr});`
+        return `messageFactory.create(${typeId}, this._sBuffer, ${offsetStr})`
+    }
+
+    private _setValueForId(typeId: number, offsetStr: string, valueStr: string) {
+        const nativeST = NativeSupportTypes.find((tp) => {
+            return tp.typeId === typeId;
+        });
+        if (nativeST) {
+            if (nativeST.literal in literalToNativeTypeName) {
+                if ('bool' === nativeST.literal || 'int8' === nativeST.literal || 'uint8' === nativeST.literal) {
+                    return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewSet}(${offsetStr}, ${valueStr})`;
+                } else {
+                    return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewSet}(${offsetStr}, ${valueStr}, true)`;
+                }
+            }
+        }
+        return `const tmp = messageFactory.create(${typeId}, this._sBuffer, ${offsetStr}); ${valueStr}.copyToBuffer(this._sBuffer, ${offsetStr})`;
+    }
+
+    private _generateBinSearch(tsType: 'number' | 'StructString', nativeTypeName: string) {
+        if (tsType === 'number') {
+            const desc = literalToNativeTypeName[nativeTypeName];
+            return `
+    private compareKey(keyValue: number, localAddr: number) {
+        const local = this._sBuffer._dataview.${desc.bufViewGet}(localAddr${['uint8', 'int8'].includes(nativeTypeName) ? '' : ', true'});
+        if (key < local) { return 1; }
+        else if (key > local) { return -1; }
+        return 0;
+    }
+
+    private binSearchLocation(key: number) {
+        let mk = 0;
+        let mx = this.size;
+        while(mx - mk > 1) {
+            const nxt = Math.floor((mx - mk) / 2);
+            const compareOffset = dataOffset + nxt * (12 + this.valueByte);
+            const rst = this.compareKey(key, compareOffset);
+            if (rst === 0) {
+                return compareOffset;
+            } else if (rst < 0) {
+                mx = nxt - 1;
+            } else {
+                mk = nxt + 1;
+            }
+        }
+        let compareOffset = dataOffset + mx * (this.keyByte + this.valueByte);
+        let rst = this.compareKey(key, compareOffset);
+        if (rst === 0) {
+            return compareOffset;
+        }
+        if (mk == mx) {
+            return undefined;
+        }
+        compareOffset -= this.keyByte + this.valueByte;
+        rst = this.compareKey(key, compareOffset);
+        if (rst === 0) {
+            return compareOffset;
+        }
+        return undefined;
+    }
+`;
+        } else if (tsType === 'StructString') {
+            return `
+    private compareKey(keyBuffer: Uint8Array, localAddr: number) {
+        let localBuffer: Uint8Array;
+        const dataOffset = this._dataView.getInt32(localAddr, true);
+        if (dataOffset > 0) {
+            const len = this._dataView.getInt32(localAddr + 4, true);
+            localBuffer = new Uint8Array(this._buffer, dataOffset, len);
+        } else {
+            const len = this._dataView.getInt8(localAddr) & 0x7F;
+            localBuffer = new Uint8Array(this._buffer, localAddr + 1, len);
+        }
+
+        const compareLen = Math.min(keyBuffer.length, localBuffer.length);
+        for (let i = 0; i < compareLen; i++) {
+            if (keyBuffer[i] < localBuffer[i]) {
+                return 1;
+            } else if (keyBuffer[i] > localBuffer[i]) {
+                return -1;
+            }
+        }
+        if (keyBuffer.length < localBuffer.length) {
+            return 1;
+        } else if (keyBuffer.length > localBuffer.length) {
+            return -1;
+        }
+        return 0;
+    }
+
+    private binSearchLocation(key: string) {
+        const dataOffset = this.dataOffset;
+        const keyBuffer = this.toUint8Array(key);
+        let mk = 0;
+        let mx = this.size;
+        while(mx - mk > 1) {
+            const nxt = Math.floor((mx - mk) / 2);
+            const compareOffset = dataOffset + nxt * (12 + this.valueByte);
+            const rst = this.compareKey(keyBuffer, compareOffset);
+            if (rst === 0) {
+                return compareOffset;
+            } else if (rst < 0) {
+                mx = nxt - 1;
+            } else {
+                mk = nxt + 1;
+            }
+        }
+
+        let compareOffset = dataOffset + mx * (12 + this.valueByte);
+        let rst = this.compareKey(keyBuffer, compareOffset);
+        if (rst === 0) {
+            return compareOffset;
+        }
+        if (mk == mx) {
+            return undefined;
+        }
+        compareOffset -= 12 + this.valueByte;
+        rst = this.compareKey(keyBuffer, compareOffset);
+        if (rst === 0) {
+            return compareOffset;
+        }
+        return undefined;
+    }
+`;
+        }
+
+        throw new Error('error.');
     }
 
     private _typeDefs: Map<number, IScopeContext> = new Map();

@@ -155,6 +155,14 @@ export abstract class StructBase {
         this._offset = newOffset;
     }
 
+    public copyToBuffer(sBuf: StructBuffer, offset: number) {
+        if (sBuf === this._sBuffer) {
+            copyArrayBuffer(this._sBuffer._buffer, this._offset, sBuf._buffer, offset, this.byteLength);
+        } else {
+            throw new Error('Should implement');
+        }
+    }
+
     protected _sBuffer: StructBuffer;
     protected _offset: number;
 }
@@ -303,44 +311,9 @@ export abstract class StructMap extends StructBase {
 
     public abstract get typeId(): number;
 
-    public abstract get perKeyByte(): number;
+    public abstract get keyByte(): number;
 
-    public abstract get perValueByte(): number;
-
-    public binSearchLocation(key: string) {
-        const dataOffset = this.dataOffset;
-        let mk = 0;
-        let mx = this.size;
-        while(mx - mk > 1) {
-            const nxt = Math.floor((mx - mk) / 2);
-            const compareOffset = dataOffset + nxt * (this.perKeyByte + this.perValueByte);
-            const kstr = new StructString(this._sBuffer, compareOffset);
-            const rst = this.compareString(kstr, key);
-            if (rst === 0) {
-                return compareOffset;
-            } else if (rst < 0) {
-                mx = nxt - 1;
-            } else {
-                mk = nxt + 1;
-            }
-        }
-        let compareOffset = dataOffset + mx * (this.perKeyByte + this.perValueByte);
-        let kstr = new StructString(this._sBuffer, compareOffset);
-        let rst = this.compareString(kstr, key);
-        if (rst === 0) {
-            return compareOffset;
-        }
-        if (mk == mx) {
-            return undefined;
-        }
-        compareOffset -= this.perKeyByte + this.perValueByte;
-        kstr = new StructString(this._sBuffer, compareOffset);
-        rst = this.compareString(kstr, key);
-        if (rst === 0) {
-            return compareOffset;
-        }
-        return undefined;
-    }
+    public abstract get valueByte(): number;
 
     /**
      * 4 byte: offset, 4 byte: capacity, 4 byte: length
@@ -375,10 +348,8 @@ export abstract class StructMap extends StructBase {
         return 0;
     }
 
-    public compareNumber(left: number, right: number) {
-        if (left < right) { return 1; }
-        else if (left > right) { return -1; }
-        return 0;
+    protected toUint8Array(str: string) {
+        return utf8Encoder.encode(str);
     }
 }
 
