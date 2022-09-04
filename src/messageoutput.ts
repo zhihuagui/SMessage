@@ -113,7 +113,7 @@ export class OutputGenerator {
         return desc;
     }
 
-    protected getTypeNameById(typeId: number) {
+    protected getSchemaTypeNameById(typeId: number) {
         const tpName = this._idToClassName.get(typeId);
         if (tpName) {
             return tpName;

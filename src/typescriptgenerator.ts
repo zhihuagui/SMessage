@@ -97,9 +97,9 @@ export class TypescriptCodeGen extends OutputGenerator {
                 const tscope = this._idToScope.get(tid);
                 if (tscope) {
                     if (importFromScope[tscope]) {
-                        importFromScope[tscope].add(this.getTypeNameById(tid));
+                        importFromScope[tscope].add(this.getSchemaTypeNameById(tid));
                     } else {
-                        importFromScope[tscope] = new Set([this.getTypeNameById(tid)]);
+                        importFromScope[tscope] = new Set([this.getSchemaTypeNameById(tid)]);
                     }
                 }
             });
@@ -168,7 +168,7 @@ ${edesc.valueTypes
                     throw new Error('Must have accessory type!!!');
                 }
                 memStr = `
-    #${memdec.name}: ${this.getTypeNameById(accessoryType.typeId)} | undefined;
+    #${memdec.name}: ${this._getMSGTSName(accessoryType.typeId)} | undefined;
 
     public get ${memdec.name}() {
         if (!this.#${memdec.name}) {
@@ -179,7 +179,7 @@ ${edesc.valueTypes
 `;
                 currOffset += 12;
                 memsStr += memStr;
-                relys.add(memdec.type.typeId);
+                relys.add(accessoryType.typeId);
                 break;
             case TypeDescType.MapType:
                 relys.add(memdec.type.typeId);
@@ -190,7 +190,7 @@ ${edesc.valueTypes
         return ${this._getValueFromId(memdec.type.typeId, `${currOffset}`)};
     }
 
-    public set ${memdec.name}(value: ${this.getTypeNameById(memdec.type.typeId)}) {
+    public set ${memdec.name}(value: ${this._getGeneralTSName(memdec.type.typeId)}) {
         ${this._setValueForId(memdec.type.typeId, `${currOffset}`, 'value')};
     }
                 `;
@@ -244,10 +244,7 @@ export class ${sdesc.typeName} extends ${structBaseName} {
                 const dims = parseInt(nameparts[1], 10);
                 const baseTypeId = desc.relyTypes.length === 1 ? desc.relyTypes[0] : parseInt(nameparts[2], 10);
                 const structByte = this.getTypeSizeFromTypeId(baseTypeId);
-                let baseDesc = this.getTypeNameById(baseTypeId);
-                if (baseDesc in literalToNativeTypeName) {
-                    baseDesc = literalToNativeTypeName[baseDesc].tsTypeName;
-                }
+                const baseDesc = this._getMSGTSName(baseTypeId);
                 brely = ArrayTypeId;
 
                 ctxString = `
@@ -278,13 +275,10 @@ messageFactory.registerLoading(${id}, ${desc.typeName});
             const keyTypeId = parseInt(nameparts[1]);
             const valueTypeId = parseInt(nameparts[2]);
             const keyByte = this.getTypeSizeFromTypeId(keyTypeId);
-            const ktypeName = this.getTypeNameById(keyTypeId);
-            const kTsTypeName = (ktypeName in literalToNativeTypeName) ? literalToNativeTypeName[ktypeName].tsTypeName : ktypeName;
+            const kSchemaTypeName = this.getSchemaTypeNameById(keyTypeId);
+            const kGTSTypeName = this._getGeneralTSName(keyTypeId);
             const valueByte = this.getTypeSizeFromTypeId(valueTypeId);
-            let baseDesc = this.getTypeNameById(valueTypeId);
-            if (baseDesc in literalToNativeTypeName) {
-                baseDesc = literalToNativeTypeName[baseDesc].tsTypeName;
-            }
+            const baseDesc = this._getMSGTSName(valueTypeId);
             let getValueStr = '';
             if (keyTypeId === StringTypeId) {
                 getValueStr = `    public get(key: string): ${baseDesc} | undefined {
@@ -305,8 +299,8 @@ messageFactory.registerLoading(${id}, ${desc.typeName});
             }
 
             let searchMethod: string;
-            if (kTsTypeName === 'number' || kTsTypeName === 'StructString') {
-                searchMethod = this._generateBinSearch(kTsTypeName, ktypeName);
+            if (kGTSTypeName === 'number' || kGTSTypeName === 'string') {
+                searchMethod = this._generateBinSearch(kGTSTypeName, kSchemaTypeName);
             } else {
                 throw new Error('Ts Key type only support string or number.');
             }
@@ -367,7 +361,7 @@ ${candidateTypes.map((tyStr, index) => {
 
 ${candidateTypes.map((tpStr, index) => {
     const typeId = parseInt(tpStr);
-    const tpName = this.getTypeNameById(typeId);
+    const tpName = this.getSchemaTypeNameById(typeId);
     const upperFirstName = tpName.at(0)?.toUpperCase() + tpName.slice(1);
     const tsTpName = tpName in literalToNativeTypeName ? literalToNativeTypeName[tpName].tsTypeName : tpName;
     const tpSize = this.getTypeSizeFromTypeId(typeId);
@@ -419,9 +413,9 @@ ${candidateTypes.map((tpStr, index) => {
             const tscope = this._idToScope.get(tid);
             if (tscope) {
                 if (importFromScope[tscope]) {
-                    importFromScope[tscope].add(this.getTypeNameById(tid));
+                    importFromScope[tscope].add(this.getSchemaTypeNameById(tid));
                 } else {
-                    importFromScope[tscope] = new Set([this.getTypeNameById(tid)]);
+                    importFromScope[tscope] = new Set([this.getSchemaTypeNameById(tid)]);
                 }
             }
         });
@@ -489,7 +483,9 @@ export const messageFactory = new StructFactory();
         });
         if (nativeST) {
             if (nativeST.literal in literalToNativeTypeName) {
-                if ('bool' === nativeST.literal || 'int8' === nativeST.literal || 'uint8' === nativeST.literal) {
+                if ('bool' === nativeST.literal) {
+                    return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewSet}(${offsetStr}, ${valueStr} ? 1 : 0)`;
+                } else if ('int8' === nativeST.literal || 'uint8' === nativeST.literal) {
                     return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewSet}(${offsetStr}, ${valueStr})`;
                 } else {
                     return `this._sBuffer._dataView.${literalToNativeTypeName[nativeST.literal].bufViewSet}(${offsetStr}, ${valueStr}, true)`;
@@ -499,12 +495,12 @@ export const messageFactory = new StructFactory();
         return `const tmp = messageFactory.create(${typeId}, this._sBuffer, ${offsetStr}); ${valueStr}.copyToBuffer(this._sBuffer, ${offsetStr})`;
     }
 
-    private _generateBinSearch(tsType: 'number' | 'StructString', nativeTypeName: string) {
+    private _generateBinSearch(tsType: 'number' | 'string', schemaTypeName: string) {
         if (tsType === 'number') {
-            const desc = literalToNativeTypeName[nativeTypeName];
+            const desc = literalToNativeTypeName[schemaTypeName];
             return `
     private compareKey(keyValue: number, localAddr: number) {
-        const local = this._sBuffer._dataview.${desc.bufViewGet}(localAddr${['uint8', 'int8'].includes(nativeTypeName) ? '' : ', true'});
+        const local = this._sBuffer._dataview.${desc.bufViewGet}(localAddr${['uint8', 'int8'].includes(schemaTypeName) ? '' : ', true'});
         if (key < local) { return 1; }
         else if (key > local) { return -1; }
         return 0;
@@ -541,7 +537,7 @@ export const messageFactory = new StructFactory();
         return undefined;
     }
 `;
-        } else if (tsType === 'StructString') {
+        } else if (tsType === 'string') {
             return `
     private compareKey(keyBuffer: Uint8Array, localAddr: number) {
         let localBuffer: Uint8Array;
@@ -607,6 +603,35 @@ export const messageFactory = new StructFactory();
         }
 
         throw new Error('error.');
+    }
+
+    /**
+     * 将id转换到TS类型，主要为了往MSG中写入数据
+     * @param id 类型的ID
+     * @returns Typescript中的输入性类型
+     */
+    private _getGeneralTSName(id: number) {
+        const name = this.getSchemaTypeNameById(id);
+        if (name in literalToNativeTypeName) {
+            return literalToNativeTypeName[name].tsTypeName;
+        }
+        if (name === 'StructString') {
+            return 'string';
+        }
+        return name;
+    }
+
+    /**
+     * 将类型转换为TS类型，主要为了从MSG中取出数据
+     * @param id 类型的ID
+     * @returns 获取在MSG中取出时的Typescript类型
+     */
+    private _getMSGTSName(id: number) {
+        const name = this.getSchemaTypeNameById(id);
+        if (name in literalToNativeTypeName) {
+            return literalToNativeTypeName[name].tsTypeName;
+        }
+        return name;
     }
 
     private _typeDefs: Map<number, IScopeContext> = new Map();

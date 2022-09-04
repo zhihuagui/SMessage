@@ -9,6 +9,6 @@ enum TitleButtonEnum: uint16 {
 }
 
 struct TitleButtonClick {
-    ButtonType: TitleButtonEnum;
-    Point: Point2D[][];
+    buttonType: TitleButtonEnum;
+    points: Point2D[][];
 }
