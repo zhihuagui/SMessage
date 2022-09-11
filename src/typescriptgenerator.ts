@@ -370,7 +370,7 @@ ${candidateTypes.map((tyStr, index) => {
 ${candidateTypes.map((tpStr, index) => {
     const typeId = parseInt(tpStr);
     const tpName = this.getSchemaTypeNameById(typeId);
-    const upperFirstName = tpName.at(0)?.toUpperCase() + tpName.slice(1);
+    const upperFirstName = tpName.charAt(0)?.toUpperCase() + tpName.slice(1);
     const tsTpName = tpName in literalToNativeTypeName ? literalToNativeTypeName[tpName].tsTypeName : tpName;
     const tpSize = this.getTypeSizeFromTypeId(typeId);
     let offsetStr: string;
