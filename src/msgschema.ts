@@ -123,3 +123,50 @@ export interface SMessageSchemas {
     enumDefs: EnumDescription[];
     accessories: IAccessoryDesc[];
 }
+
+
+export enum EMemberRefType {
+    inline = 1,
+    reference = 2,
+}
+
+export interface StructDescResult {
+    type: 'struct';
+    typeId: number;
+    name: string;
+    scope: string;
+    byteLength: number;
+    members: {
+        refType: EMemberRefType;
+        offsetToStruct: number;
+        typeId: number;
+    }[];
+}
+
+export interface ArrayDescResult {
+    type: 'array';
+    typeId: number;
+    name: string;
+    scope: string;
+    valueTypeId: number;
+}
+
+export interface MapDescResult {
+    type: 'map';
+    typeId: number;
+    name: string;
+    scope: string;
+    keyTypeId: number;
+    valueTypeId: number;
+}
+
+export interface CombineDescResult {
+    type: 'combine';
+    typeId: number;
+    name: string;
+    scope: string;
+    members: {
+        refType: EMemberRefType;
+        typeId: number;
+    }[];
+}
