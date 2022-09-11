@@ -14,6 +14,7 @@ import {
     MINUserDefTypeId,
     PredefinedTypes,
     IAccessoryDesc,
+    EMemberRefType,
 } from './msgschema';
 import { ICombineType as IParserCombineType } from './parser';
 import { isGraterOrEqualThan } from './version';
@@ -169,13 +170,15 @@ export class SMessageCompiler {
             if (typedef.type === 'enum') {
                 currSchema.enumDefs.push(this._enumDefToEnumDesc(typedef));
             } else if (typedef.type === 'struct') {
-                currSchema.structDefs.push(this._structDefToStructDesc(typedef));
+                const structDesc = this._structDefToStructDesc(typedef);
+                currSchema.structDefs.push(structDesc);
+                this._id2Structs.set(structDesc.typeId, structDesc);
             }
         });
 
-        this._analyseSizeForAllStruct(currSchema);
+        this._analyseMemberAndByteForAllStruct(currSchema);
 
-        this._instId2Structs.forEach((v) => {
+        this._id2Accessory.forEach((v) => {
             currSchema.accessories.push(v);
         });
 
@@ -183,13 +186,13 @@ export class SMessageCompiler {
     }
 
     /**
-     * 以4字节对齐的方式，分析并写入struct类型
+     * 以4字节对齐的方式，分析Struct的Bytes和member的type
      *
      * @private
      * @param {SMessageSchemas} msgs
      * @memberof SMessageCompiler
      */
-    private _analyseSizeForAllStruct(msgs: SMessageSchemas) {
+    private _analyseMemberAndByteForAllStruct(msgs: SMessageSchemas) {
         const id2Types: Map<number, StructDescription | EnumDescription> = new Map();
         msgs.enumDefs.forEach((ed) => {
             id2Types.set(ed.typeId, ed);
@@ -220,7 +223,7 @@ export class SMessageCompiler {
                 const psByte = desc.preDefinedClass.prototype.byteLength;
                 byteSize = this._increaseByteWithAlign(byteSize, psByte, Math.min(byteAlign, psByte));
                 const insId = this._generateAccessoryType(mtDesc, sDesc.scope);
-                mtDesc.accessory = this._instId2Structs.get(insId);
+                mtDesc.accessory = this._id2Accessory.get(insId);
             } else if (mtDesc.descType === TypeDescType.ArrayType) {
                 const desc = PredefinedTypes.find(t => t.typeId === mtDesc.typeId);
                 if (!desc) {
@@ -229,7 +232,7 @@ export class SMessageCompiler {
                 const psByte = desc.preDefinedClass.prototype.byteLength;
                 byteSize = this._increaseByteWithAlign(byteSize, psByte, Math.min(byteAlign, psByte));
                 const insId = this._generateAccessoryType(mtDesc, sDesc.scope);
-                mtDesc.accessory = this._instId2Structs.get(insId);
+                mtDesc.accessory = this._id2Accessory.get(insId);
             } else if (mtDesc.descType === TypeDescType.CombineType) {
                 const desc = PredefinedTypes.find(t => t.typeId === mtDesc.typeId);
                 if (!desc) {
@@ -238,7 +241,7 @@ export class SMessageCompiler {
                 const psByte = desc.preDefinedClass.prototype.byteLength;
                 byteSize = this._increaseByteWithAlign(byteSize, psByte, Math.min(byteAlign, psByte));
                 const insId = this._generateAccessoryType(mtDesc, sDesc.scope);
-                mtDesc.accessory = this._instId2Structs.get(insId);
+                mtDesc.accessory = this._id2Accessory.get(insId);
             } else if (mtDesc.descType === TypeDescType.UserDefType) {
                 const dTDesc = id2Types.get(mtDesc.typeId);
                 if (dTDesc && 'byteLength' in dTDesc) {
@@ -276,6 +279,7 @@ export class SMessageCompiler {
             typeName: structDef.name,
             byteLength: 0,
             members: [],
+            dependences: [],
         };
         structDef.cst.children.memberDefine.forEach((memberDef) => {
             const memberName = memberDef.children.Literal[0].image;
@@ -283,7 +287,13 @@ export class SMessageCompiler {
             ret.members.push({
                 name: memberName,
                 type: memberType,
+                refType: EMemberRefType.unknow,
+                offset: -1,
+                typeId: -1,
             });
+            if (memberType.descType === TypeDescType.UserDefType) {
+                ret.dependences.push(memberType.typeId);
+            }
         });
         return ret;
     }
@@ -316,21 +326,6 @@ export class SMessageCompiler {
             ret.valueTypes.push({ name, value });
         });
         return ret;
-    }
-
-    private _getAdditionalRawType(rawType: { name: string; scope: string }) {
-        let typeId = MINUserDefTypeId;
-        const tps = this._scopeDefs.get(rawType.scope);
-        if (tps) {
-            const ans = tps.find((tp) => tp.typeName === rawType.name);
-            if (ans) {
-                typeId = ans.typeId;
-            }
-        }
-        if (typeId === MINUserDefTypeId) {
-            typeId = ++this._maxTypeId;
-        }
-        return typeId;
     }
 
     private combineTypeToTypeDef(scope: string, combType: IParserCombineType): AllTypeDesc {
@@ -403,6 +398,7 @@ export class SMessageCompiler {
         if (rawType) {
             const ret: IUserDefTypeDesc = {
                 descType: TypeDescType.UserDefType,
+                typeName: rawType.name,
                 typeId: -1,
             };
             if (rawType.type === 'enum') {
@@ -422,14 +418,17 @@ export class SMessageCompiler {
         const baseTypes = combType.children.baseType;
         const btypeStrs = baseTypes.map((btype) => {
             if ('Comma' in btype.children) {
+                /** <keytype, valuetype> 是一个Map类型 */
                 const kimg = btype.children.Literal[0].image;
                 const img = this.combineTypeToString(btype.children.combineType[0]);
                 return `Map<${kimg}, ${img}>`;
             } else if ('Literal' in btype.children) {
+                /** literal([]..) 是一个名字类型或者名字的数组类型 */
                 const sqNum = btype.children.LSquare ? btype.children.LSquare.length : 0;
                 const img = btype.children.Literal[0].image;
                 return `${img}${this.getRepeatRepeats(sqNum, '[]')}`;
             } else if ('combineType' in btype.children) {
+                /** 是一个组合后的类型或者组合后的数组类型 */
                 const sqNum = btype.children.LSquare ? btype.children.LSquare.length : 0;
                 const img = this.combineTypeToString(btype.children.combineType[0]);
                 return `${img}${this.getRepeatRepeats(sqNum, '[]')}`;
@@ -453,62 +452,10 @@ export class SMessageCompiler {
         return rst;
     }
 
-    private initPrevSchema() {
-        if (!this._historyFile) {
-            this._prevSchema = {
-                version: '0.0.0',
-                enumDefs: [],
-                structDefs: [],
-                accessories: [],
-            };
-            return;
-        }
-        if (fs.existsSync(this._historyFile)) {
-            const stat = fs.statSync(this._historyFile);
-            if (stat.isFile()) {
-                try {
-                    const jstr = fs.readFileSync(this._historyFile);
-                    this._prevSchema = JSON.parse(jstr.toString());
-                } catch (err) {
-                    throw new Error('Init the prev Schema failed.');
-                }
-            }
-        }
-
-        if (!this._prevSchema) {
-            this._prevSchema = {
-                version: '0.0.0',
-                enumDefs: [],
-                structDefs: [],
-                accessories: [],
-            };
-        }
-
-        if (!isGraterOrEqualThan(this._version, this._prevSchema.version)) {
-            throw new Error('Cannot generate new version not larger than prev generated.');
-        }
-
-        this._prevSchema.enumDefs.forEach((edef) => {
-            let scpdeDef = this._scopeDefs.get(edef.scope);
-            if (!scpdeDef) {
-                scpdeDef = [];
-                this._scopeDefs.set(edef.scope, scpdeDef);
-            }
-            scpdeDef.push(edef);
-            this._maxTypeId = edef.typeId;
-        });
-
-        this._prevSchema.structDefs.forEach((tdef) => {
-            let scpdeDef = this._scopeDefs.get(tdef.scope);
-            if (!scpdeDef) {
-                scpdeDef = [];
-                this._scopeDefs.set(tdef.scope, scpdeDef);
-            }
-            scpdeDef.push(tdef);
-            this._maxTypeId = tdef.typeId;
-        });
-    }
-
+    /**
+     * 分析所有的文件，所有的scope里都构建自身闭环的类型系统
+     * @param rawTypes 
+     */
     private generateRawTypeMaps(rawTypes: RawTypeDef[]) {
         this._rawTypeMapping.clear();
         rawTypes.forEach((rtypeDef) => {
@@ -547,6 +494,24 @@ export class SMessageCompiler {
         return this._currentSchema;
     }
 
+    private getNoAccessoryName(type: AllTypeDesc, usingId: boolean): string {
+        if (type.descType === TypeDescType.ArrayType) {
+            return `Array<${type.arrayDims}, ${this.getNoAccessoryName(type.baseType, usingId)}>`;
+        } else if (type.descType === TypeDescType.MapType) {
+            return `Map<${this.getNoAccessoryName(type.keyType, usingId)}, ${this.getNoAccessoryName(type.valueType, usingId)}>`;
+        } else if (type.descType === TypeDescType.CombineType) {
+            return `Union<${type.types.map(t => this.getNoAccessoryName(t, usingId)).join(', ')}>`;
+        }
+        else {
+            if (usingId) return `${type.typeId}`;
+            if (type.descType === TypeDescType.UserDefType) {
+                return type.typeName;
+            } else {
+                return type.literal;
+            }
+        }
+    }
+
     private _generateAccessoryType(type: IArrayTypeDesc | IMapTypeDesc | ICombineTypeDesc, currScope: string) {
         let ret: IAccessoryDesc;
         if (type.descType === TypeDescType.ArrayType) {
@@ -555,23 +520,25 @@ export class SMessageCompiler {
             let typeId = -1;
             for (let i = 1; i <= dim; i++) {
                 const typeName = `MA_${i}_${btype}`;
-                const prevType = i === 1 ? btype : this._accessoryStructs.get(`MA_${i-1}_${btype}`)?.typeId;
+                const prevType = i === 1 ? btype : this._name2Accessory.get(`MA_${i-1}_${btype}`)?.typeId;
                 if (!prevType) {
                     throw new Error('Cannot trigger this.');
                 }
-                const astruct = this._accessoryStructs.get(typeName);
+                const noAccName = this.getNoAccessoryName(type, true);
+                const astruct = this._name2Accessory.get(typeName);
+                typeId = this._getAdditionalAccessoryTypeId(noAccName);
                 if (!astruct) {
-                    typeId = ++this._maxTypeId;
                     const sacc: IAccessoryDesc = {
                         type: 'multiArray',
-                        typeId: typeId,
+                        typeId,
                         typeName: typeName,
                         byteLength: StructMultiArray.prototype.byteLength,
                         relyTypes: [prevType],
                         scope: currScope,
+                        noAccessoryName: noAccName,
                     };
-                    this._instId2Structs.set(typeId, sacc);
-                    this._accessoryStructs.set(typeName, sacc);
+                    this._id2Accessory.set(typeId, sacc);
+                    this._name2Accessory.set(typeName, sacc);
                 } else {
                     if (astruct.scope !== currScope) {
                         astruct.scope = '';
@@ -584,50 +551,54 @@ export class SMessageCompiler {
             const ktype = this._getInstancedTypeId(type.keyType, currScope);
             const vtype = this._getInstancedTypeId(type.valueType, currScope);
             const typeName = `MP_${ktype}_${vtype}`;
-            const astruct = this._accessoryStructs.get(typeName);
+            const astruct = this._name2Accessory.get(typeName);
             if (astruct) {
                 if (astruct.scope !== currScope) {
                     astruct.scope = '';
                 }
                 return astruct.typeId;
             }
-            const typeid = ++this._maxTypeId;
+            const noAccName = this.getNoAccessoryName(type, true);
+            const typeId = this._getAdditionalAccessoryTypeId(noAccName);
             ret = {
                 type: 'mapStruct',
-                typeId: typeid,
+                typeId,
                 typeName,
                 byteLength: StructMap.prototype.byteLength,
                 relyTypes: [ktype, vtype],
                 scope: currScope,
+                noAccessoryName: noAccName,
             };
-            this._instId2Structs.set(typeid, ret);
-            this._accessoryStructs.set(typeName, ret);
-            return typeid;
+            this._id2Accessory.set(typeId, ret);
+            this._name2Accessory.set(typeName, ret);
+            return typeId;
         } else if (type.descType === TypeDescType.CombineType) {
             const ctypes = type.types.map((tp) => {
                 return this._getInstancedTypeId(tp, currScope);
             });
             ctypes.sort();
             const typeName = `CB_${ctypes.join('_')}`;
-            const astruct = this._accessoryStructs.get(typeName);
+            const astruct = this._name2Accessory.get(typeName);
             if (astruct) {
                 if (astruct.scope !== currScope) {
                     astruct.scope = '';
                 }
                 return astruct.typeId;
             }
-            const typeid = ++this._maxTypeId;
+            const noAccName = this.getNoAccessoryName(type, true);
+            const typeId = this._getAdditionalAccessoryTypeId(noAccName);
             ret = {
                 type: 'combineType',
-                typeId: typeid,
+                typeId,
                 typeName,
                 byteLength: StructCombine.prototype.byteLength,
                 relyTypes: ctypes,
                 scope: currScope,
+                noAccessoryName: this.getNoAccessoryName(type, true),
             };
-            this._instId2Structs.set(typeid, ret);
-            this._accessoryStructs.set(typeName, ret);
-            return typeid;
+            this._id2Accessory.set(typeId, ret);
+            this._name2Accessory.set(typeName, ret);
+            return typeId;
         }
 
         throw new Error('Unsupport accessory type.');
@@ -643,16 +614,135 @@ export class SMessageCompiler {
         throw new Error('Cannot get instanced typeId.');
     }
 
-    private _rawTypeMapping: Map<string, RawTypeDef> = new Map();
-    private _accessoryStructs: Map<string, IAccessoryDesc> = new Map();
-    private _instId2Structs: Map<number, IAccessoryDesc> = new Map();
+    /**
+     * Scope and Name to RawTypeDef
+     */
+    private _rawTypeMapping: Map<string, EnumTypeDef | StructTypeDef> = new Map();
 
-    private _version: string;
+    private _id2Structs: Map<number, StructDescription> = new Map();
+    private _name2Accessory: Map<string, IAccessoryDesc> = new Map();
+    private _id2Accessory: Map<number, IAccessoryDesc> = new Map();
+
     private _idlFiles: string[];
     private _fileNameToCst: Map<string, ISMSGParserResult> = new Map();
+    private _currentSchema: SMessageSchemas | undefined;
+    
+    /** 原来的Schema继承ID信息 */
     private _historyFile?: string;
     private _prevSchema: SMessageSchemas | undefined;
-    private _currentSchema: SMessageSchemas | undefined;
+    private _scopeToPrevDefs: Map<string, (EnumDescription | StructDescription)[]> = new Map();
+    private _stringToPrevAccessoryId: Map<string, IAccessoryDesc> = new Map();
     private _maxTypeId: number = MINUserDefTypeId;
-    private _scopeDefs: Map<string, (EnumDescription | StructDescription)[]> = new Map();
+    private _version: string;
+
+    /**
+     * 获取Enum和Struct的ID，如果ID在之前版本存在过，则直接使用之前的
+     *
+     * @private
+     * @param {{ name: string; scope: string }} rawType
+     * @return {number} 
+     * @memberof SMessageCompiler
+     */
+    private _getAdditionalRawType(rawType: { name: string; scope: string }): number {
+        let typeId = MINUserDefTypeId;
+        const tps = this._scopeToPrevDefs.get(rawType.scope);
+        if (tps) {
+            const ans = tps.find((tp) => tp.typeName === rawType.name);
+            if (ans) {
+                typeId = ans.typeId;
+            }
+        }
+        if (typeId === MINUserDefTypeId) {
+            typeId = ++this._maxTypeId;
+        }
+        return typeId;
+    }
+
+    /**
+     * 获取辅助结构的TypeId
+     *
+     * @private
+     * @param {string} noAccessoryName 辅助结构的名字(以基础ID为命名基础)
+     * @return {number} 新的类型
+     * @memberof SMessageCompiler
+     */
+    private _getAdditionalAccessoryTypeId(noAccessoryName: string): number {
+        let typeId = MINUserDefTypeId;
+        const eid = this._stringToPrevAccessoryId.get(noAccessoryName);
+        if (eid) {
+            return eid.typeId;
+        }
+        if (typeId === MINUserDefTypeId) {
+            typeId = ++this._maxTypeId;
+        }
+        return typeId;
+    }
+
+    /**
+     * 读取历史的version，历史的生成方式将会对本次的造成影响，因为需要考虑做migration
+     *
+     * @private
+     * @return {*} 
+     * @memberof SMessageCompiler
+     */
+    private initPrevSchema() {
+        if (!this._historyFile) {
+            this._prevSchema = {
+                version: '0.0.0',
+                enumDefs: [],
+                structDefs: [],
+                accessories: [],
+            };
+            return;
+        }
+        if (fs.existsSync(this._historyFile)) {
+            const stat = fs.statSync(this._historyFile);
+            if (stat.isFile()) {
+                try {
+                    const jstr = fs.readFileSync(this._historyFile);
+                    this._prevSchema = JSON.parse(jstr.toString());
+                } catch (err) {
+                    throw new Error('Init the prev Schema failed.');
+                }
+            }
+        }
+
+        if (!this._prevSchema) {
+            this._prevSchema = {
+                version: '0.0.0',
+                enumDefs: [],
+                structDefs: [],
+                accessories: [],
+            };
+        }
+
+        if (!isGraterOrEqualThan(this._version, this._prevSchema.version)) {
+            throw new Error('Cannot generate new version not larger than prev generated.');
+        }
+
+        this._prevSchema.enumDefs.forEach((edef) => {
+            let scpdeDef = this._scopeToPrevDefs.get(edef.scope);
+            if (!scpdeDef) {
+                scpdeDef = [];
+                this._scopeToPrevDefs.set(edef.scope, scpdeDef);
+            }
+            scpdeDef.push(edef);
+            this._maxTypeId = edef.typeId;
+        });
+
+        this._prevSchema.structDefs.forEach((tdef) => {
+            let scpdeDef = this._scopeToPrevDefs.get(tdef.scope);
+            if (!scpdeDef) {
+                scpdeDef = [];
+                this._scopeToPrevDefs.set(tdef.scope, scpdeDef);
+            }
+            scpdeDef.push(tdef);
+            this._maxTypeId = tdef.typeId;
+        });
+
+        this._prevSchema.accessories.forEach((adef) => {
+            this._stringToPrevAccessoryId.set(adef.noAccessoryName, adef);
+            this._maxTypeId = adef.typeId;
+        });
+    }
 }

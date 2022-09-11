@@ -31,6 +31,7 @@ export interface IAccessoryDesc {
     byteLength: number;
     relyTypes: number[];
     typeName: string;
+    noAccessoryName: string;
     scope: string;
 }
 
@@ -66,6 +67,7 @@ export interface IMapTypeDesc extends ITypeDesc {
 export interface IUserDefTypeDesc extends ITypeDesc {
     descType: TypeDescType.UserDefType;
     typeId: number;
+    typeName: string;
 }
 
 export type AllTypeDesc = NativeSupportType | IArrayTypeDesc | IMapTypeDesc | IUserDefTypeDesc | ICombineTypeDesc;
@@ -108,12 +110,26 @@ export interface EnumDescription extends BaseDescription {
     }[];
 }
 
+export enum EMemberRefType {
+    unknow = 0,
+    inline = 1,
+    reference = 2,
+}
+
+/**
+ * 初始化状态offset为-1，refType是unkonw
+ * 实际状态，refType和offset必须有正常的值
+ */
 export interface StructDescription extends BaseDescription {
     type: 'struct';
     byteLength: number;
+    dependences: number[];
     members: {
         name: string;
+        refType: EMemberRefType;
+        offset: number;
         type: AllTypeDesc;
+        typeId: number;
     }[];
 }
 
@@ -122,51 +138,4 @@ export interface SMessageSchemas {
     structDefs: StructDescription[];
     enumDefs: EnumDescription[];
     accessories: IAccessoryDesc[];
-}
-
-
-export enum EMemberRefType {
-    inline = 1,
-    reference = 2,
-}
-
-export interface StructDescResult {
-    type: 'struct';
-    typeId: number;
-    name: string;
-    scope: string;
-    byteLength: number;
-    members: {
-        refType: EMemberRefType;
-        offsetToStruct: number;
-        typeId: number;
-    }[];
-}
-
-export interface ArrayDescResult {
-    type: 'array';
-    typeId: number;
-    name: string;
-    scope: string;
-    valueTypeId: number;
-}
-
-export interface MapDescResult {
-    type: 'map';
-    typeId: number;
-    name: string;
-    scope: string;
-    keyTypeId: number;
-    valueTypeId: number;
-}
-
-export interface CombineDescResult {
-    type: 'combine';
-    typeId: number;
-    name: string;
-    scope: string;
-    members: {
-        refType: EMemberRefType;
-        typeId: number;
-    }[];
 }
