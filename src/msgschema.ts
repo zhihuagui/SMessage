@@ -1,4 +1,4 @@
-import { StructBase, StructCombine, StructMap, StructMultiArray, StructString } from './runtime/structs';
+import { StructBase, StructCombine, StructMap, StructArray, StructString } from './runtime/structs';
 
 export const StructBaseId = 59 as const;
 export const StringTypeId = 60 as const;
@@ -26,7 +26,7 @@ export interface NativeSupportType extends ITypeDesc {
 }
 
 export interface IAccessoryDesc {
-    type: 'multiArray' | 'mapStruct' | 'combineType';
+    type: 'mapArray' | 'mapStruct' | 'combineType';
     typeId: number;
     byteLength: number;
     relyTypes: number[];
@@ -89,7 +89,7 @@ export const NativeSupportTypes: NativeSupportType[] = [
 
 export const PredefinedTypes: PreDefinedStructType[] = [
     { typeId: StringTypeId, preDefinedClass: StructString, preDefinedClassName: 'StructString' },
-    { typeId: ArrayTypeId, preDefinedClass: StructMultiArray, preDefinedClassName: 'StructMultiArray' },
+    { typeId: ArrayTypeId, preDefinedClass: StructArray, preDefinedClassName: 'StructArray' },
     { typeId: MapTypeId, preDefinedClass: StructMap, preDefinedClassName: 'StructMap' },
     { typeId: CombineTypeId, preDefinedClass: StructCombine, preDefinedClassName: 'StructCombine' },
     { typeId: StructBaseId, preDefinedClass: StructBase, preDefinedClassName: 'StructBase' },

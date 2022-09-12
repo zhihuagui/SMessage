@@ -18,7 +18,7 @@ import {
 } from './msgschema';
 import { ICombineType as IParserCombineType } from './parser';
 import { isGraterOrEqualThan } from './version';
-import { StructCombine, StructMap, StructMultiArray } from './runtime/structs';
+import { StructCombine, StructMap, StructArray } from './runtime/structs';
 
 type EnumTypeDef = {
     type: 'enum';
@@ -207,6 +207,14 @@ export class SMessageCompiler {
     }
 
     private _analyseStructDesc(sDesc: StructDescription, id2Types: Map<number, StructDescription | EnumDescription>): StructDescription {
+        if (this._structAnalyzed.has(sDesc.typeId)) {
+            const rst = this._id2Structs.get(sDesc.typeId);
+            if (!rst) {
+                throw new Error('Should have been analyzed.');
+            }
+            return rst;
+        }
+        this._structAnalyzed.add(sDesc.typeId);
         const byteAlign = 4;
         let byteSize = 0;
         for (let i = 0; i < sDesc.members.length; i++) {
@@ -215,6 +223,9 @@ export class SMessageCompiler {
             if (mtDesc.descType === TypeDescType.NativeSupportType) {
                 const descByte = mtDesc.byteSize;
                 byteSize = this._increaseByteWithAlign(byteSize, descByte, Math.min(byteAlign, descByte));
+                member.refType = EMemberRefType.inline;
+                member.offset = byteSize - descByte;
+                member.typeId = mtDesc.typeId;
             } else if (mtDesc.descType === TypeDescType.MapType) {
                 const desc = PredefinedTypes.find(t => t.typeId === mtDesc.typeId);
                 if (!desc) {
@@ -224,6 +235,9 @@ export class SMessageCompiler {
                 byteSize = this._increaseByteWithAlign(byteSize, psByte, Math.min(byteAlign, psByte));
                 const insId = this._generateAccessoryType(mtDesc, sDesc.scope);
                 mtDesc.accessory = this._id2Accessory.get(insId);
+                member.refType = EMemberRefType.inline;
+                member.offset = byteSize - psByte;
+                member.typeId = insId;
             } else if (mtDesc.descType === TypeDescType.ArrayType) {
                 const desc = PredefinedTypes.find(t => t.typeId === mtDesc.typeId);
                 if (!desc) {
@@ -233,6 +247,9 @@ export class SMessageCompiler {
                 byteSize = this._increaseByteWithAlign(byteSize, psByte, Math.min(byteAlign, psByte));
                 const insId = this._generateAccessoryType(mtDesc, sDesc.scope);
                 mtDesc.accessory = this._id2Accessory.get(insId);
+                member.refType = EMemberRefType.inline;
+                member.offset = byteSize - psByte;
+                member.typeId = insId;
             } else if (mtDesc.descType === TypeDescType.CombineType) {
                 const desc = PredefinedTypes.find(t => t.typeId === mtDesc.typeId);
                 if (!desc) {
@@ -242,13 +259,28 @@ export class SMessageCompiler {
                 byteSize = this._increaseByteWithAlign(byteSize, psByte, Math.min(byteAlign, psByte));
                 const insId = this._generateAccessoryType(mtDesc, sDesc.scope);
                 mtDesc.accessory = this._id2Accessory.get(insId);
+                member.refType = EMemberRefType.inline;
+                member.offset = byteSize - psByte;
+                member.typeId = insId;
             } else if (mtDesc.descType === TypeDescType.UserDefType) {
                 const dTDesc = id2Types.get(mtDesc.typeId);
                 if (dTDesc && 'byteLength' in dTDesc) {
                     const arst = this._analyseStructDesc(dTDesc, id2Types);
-                    byteSize = this._increaseByteWithAlign(byteSize, arst.byteLength, Math.min(byteAlign, 4));
+                    let memByte = arst.byteLength;
+                    if (this._isTypeDirectDependenceBy(sDesc, arst)) {
+                        member.refType = EMemberRefType.reference;
+                        memByte = 4;
+                    } else {
+                        member.refType = EMemberRefType.inline;
+                    }
+                    byteSize = this._increaseByteWithAlign(byteSize, memByte, Math.min(byteAlign, 4));
+                    member.offset = byteSize - memByte;
+                    member.typeId = arst.typeId;
                 } else if (dTDesc && 'dataType' in dTDesc) {
+                    member.refType = EMemberRefType.inline;
                     byteSize = this._increaseByteWithAlign(byteSize, dTDesc.dataType.byteSize, Math.min(byteAlign, dTDesc.dataType.byteSize));
+                    member.offset = byteSize - dTDesc.dataType.byteSize;
+                    member.typeId = dTDesc.dataType.typeId;
                 } else {
                     throw new Error(`Unsupport type id: ${mtDesc.typeId}`);
                 }
@@ -271,6 +303,14 @@ export class SMessageCompiler {
         return btSize + increase;
     }
 
+    /**
+     * 从CST类型转换为StructDescription
+     *
+     * @private
+     * @param {StructTypeDef} structDef CST的Struct类型
+     * @return {*}  {StructDescription}
+     * @memberof SMessageCompiler
+     */
     private _structDefToStructDesc(structDef: StructTypeDef): StructDescription {
         const ret: StructDescription = {
             type: 'struct',
@@ -283,7 +323,7 @@ export class SMessageCompiler {
         };
         structDef.cst.children.memberDefine.forEach((memberDef) => {
             const memberName = memberDef.children.Literal[0].image;
-            const memberType = this.combineTypeToTypeDef(structDef.scope, memberDef.children.combineType[0]);
+            const memberType = this._cstTypeToTypeDesc(structDef.scope, memberDef.children.combineType[0]);
             ret.members.push({
                 name: memberName,
                 type: memberType,
@@ -328,24 +368,24 @@ export class SMessageCompiler {
         return ret;
     }
 
-    private combineTypeToTypeDef(scope: string, combType: IParserCombineType): AllTypeDesc {
-        const baseTypes = combType.children.baseType;
-        if (baseTypes.length > 1) {
+    private _cstTypeToTypeDesc(scope: string, combType: IParserCombineType): AllTypeDesc {
+        const compTypes = combType.children.baseType;
+        if (compTypes.length > 1) {
             const ret: ICombineTypeDesc = {
                 descType: TypeDescType.CombineType,
                 typeId: 63,
                 types: [],
             };
-            baseTypes.forEach((btype) => {
-                const btypedef = this.baseTypeToTypeDef(scope, btype);
+            compTypes.forEach((btype) => {
+                const btypedef = this._subTypeToTypeDesc(scope, btype);
                 ret.types.push(btypedef);
             });
             return ret;
         }
-        return this.baseTypeToTypeDef(scope, baseTypes[0]);
+        return this._subTypeToTypeDesc(scope, compTypes[0]);
     }
 
-    private baseTypeToTypeDef(scope: string, btype: IBaseType): Exclude<AllTypeDesc, ICombineTypeDesc> {
+    private _subTypeToTypeDesc(scope: string, btype: IBaseType): Exclude<AllTypeDesc, ICombineTypeDesc> {
         if ('Comma' in btype.children) {
             const keyType = this.typeStringToType(scope, btype.children.Literal[0].image);
             if (keyType.descType === TypeDescType.UserDefType) {
@@ -355,7 +395,7 @@ export class SMessageCompiler {
                 descType: TypeDescType.MapType,
                 typeId: 62,
                 keyType,
-                valueType: this.combineTypeToTypeDef(scope, btype.children.combineType[0]),
+                valueType: this._cstTypeToTypeDesc(scope, btype.children.combineType[0]),
             };
             return ret;
         } else if ('Literal' in btype.children) {
@@ -378,7 +418,7 @@ export class SMessageCompiler {
                     descType: TypeDescType.ArrayType,
                     typeId: 61,
                     arrayDims: sqNum,
-                    baseType: this.combineTypeToTypeDef(scope, btype.children.combineType[0]),
+                    baseType: this._cstTypeToTypeDesc(scope, btype.children.combineType[0]),
                 };
                 return ret;
             } else {
@@ -386,6 +426,24 @@ export class SMessageCompiler {
             }
         }
         throw new Error(`Unsupport base type.`);
+    }
+
+    private _isTypeDirectDependenceBy(type: StructDescription, checkType: StructDescription) {
+        const checkDeps = (dep: number, sets: Set<number>) => {
+            if (sets.has(dep)) {
+                return;
+            }
+            sets.add(dep);
+            const sdesc = this._id2Structs.get(dep);
+            if (sdesc) {
+                sdesc.dependences.forEach(sdep => {
+                    checkDeps(sdep, sets);
+                });
+            }
+        }
+        const depSets = new Set<number>();
+        checkType.dependences.forEach(dep => checkDeps(dep, depSets));
+        return depSets.has(type.typeId);
     }
 
     private typeStringToType(scope: string, typeName: string) {
@@ -494,9 +552,9 @@ export class SMessageCompiler {
         return this._currentSchema;
     }
 
-    private getNoAccessoryName(type: AllTypeDesc, usingId: boolean): string {
+    private getNoAccessoryName(type: AllTypeDesc, usingId: boolean, replacedDim?: number): string {
         if (type.descType === TypeDescType.ArrayType) {
-            return `Array<${type.arrayDims}, ${this.getNoAccessoryName(type.baseType, usingId)}>`;
+            return `Array<${replacedDim ? replacedDim : type.arrayDims}, ${this.getNoAccessoryName(type.baseType, usingId)}>`;
         } else if (type.descType === TypeDescType.MapType) {
             return `Map<${this.getNoAccessoryName(type.keyType, usingId)}, ${this.getNoAccessoryName(type.valueType, usingId)}>`;
         } else if (type.descType === TypeDescType.CombineType) {
@@ -524,15 +582,15 @@ export class SMessageCompiler {
                 if (!prevType) {
                     throw new Error('Cannot trigger this.');
                 }
-                const noAccName = this.getNoAccessoryName(type, true);
+                const noAccName = this.getNoAccessoryName(type, true, i);
                 const astruct = this._name2Accessory.get(typeName);
                 typeId = this._getAdditionalAccessoryTypeId(noAccName);
                 if (!astruct) {
                     const sacc: IAccessoryDesc = {
-                        type: 'multiArray',
+                        type: 'mapArray',
                         typeId,
                         typeName: typeName,
-                        byteLength: StructMultiArray.prototype.byteLength,
+                        byteLength: StructArray.prototype.byteLength,
                         relyTypes: [prevType],
                         scope: currScope,
                         noAccessoryName: noAccName,
@@ -622,6 +680,8 @@ export class SMessageCompiler {
     private _id2Structs: Map<number, StructDescription> = new Map();
     private _name2Accessory: Map<string, IAccessoryDesc> = new Map();
     private _id2Accessory: Map<number, IAccessoryDesc> = new Map();
+
+    private _structAnalyzed: Set<number> = new Set();
 
     private _idlFiles: string[];
     private _fileNameToCst: Map<string, ISMSGParserResult> = new Map();

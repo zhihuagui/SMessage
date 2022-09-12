@@ -1,6 +1,6 @@
 import path from 'path';
 import { OutputGenerator } from './messageoutput';
-import { EnumDescription, StringTypeId, StructDescription, NativeSupportTypes, TypeDescType, IAccessoryDesc, ArrayTypeId, MapTypeId, CombineTypeId, StructBaseId } from './msgschema';
+import { EnumDescription, StringTypeId, StructDescription, NativeSupportTypes, TypeDescType, IAccessoryDesc, ArrayTypeId, MapTypeId, CombineTypeId, StructBaseId, EMemberRefType } from './msgschema';
 
 interface NativeTypeGenDesc {
     [key: string]: { tsTypeName: string; bufViewGet: string; bufViewSet: string };
@@ -158,49 +158,100 @@ ${edesc.valueTypes
         const structBaseName = 'StructBase';
         const relys: Set<number> = new Set();
         let memsStr = '';
-        let currOffset = 0;
         sdesc.members.forEach(((memdec) => {
-            let memStr = '';
             switch (memdec.type.descType) {
             case TypeDescType.ArrayType:
+            {
                 const accessoryType = memdec.type.accessory;
                 if (!accessoryType) {
                     throw new Error('Must have accessory type!!!');
                 }
-                memStr = `
+                memsStr += `
     #${memdec.name}: ${this._getMSGTSName(accessoryType.typeId)} | undefined;
 
     public get ${memdec.name}() {
         if (!this.#${memdec.name}) {
-            this.#${memdec.name} = messageFactory.create(${accessoryType.typeId}, this._buffer, this._offset + ${currOffset});
+            this.#${memdec.name} = messageFactory.create(${accessoryType.typeId}, this._buffer, this._offset + ${memdec.offset});
         }
         return this.#${memdec.name};
     }
 `;
-                currOffset += 12;
-                memsStr += memStr;
                 relys.add(accessoryType.typeId);
                 break;
+            }
             case TypeDescType.MapType:
-                relys.add(memdec.type.typeId);
+            {
+                const accessoryType = memdec.type.accessory;
+                if (!accessoryType) {
+                    throw new Error('Must have accessory type!!!');
+                }
+                memsStr += `
+    #${memdec.name}: ${this._getMSGTSName(accessoryType.typeId)} | undefined;
+    public get ${memdec.name}() {
+        if (!this.#${memdec.name}) {
+            this.#${memdec.name} = messageFactory.create(${accessoryType.typeId}, this._buffer, this._offset + ${memdec.offset});
+        }
+        return this.#${memdec.name};
+    }
+`;
+                relys.add(accessoryType.typeId);
                 break;
+            }
             case TypeDescType.NativeSupportType:
                 memsStr += `
     public get ${memdec.name}() {
-        return ${this._getValueFromId(memdec.type.typeId, `${currOffset}`)};
+        return ${this._getValueFromId(memdec.type.typeId, `${memdec.offset}`)};
     }
 
     public set ${memdec.name}(value: ${this._getGeneralTSName(memdec.type.typeId)}) {
-        ${this._setValueForId(memdec.type.typeId, `${currOffset}`, 'value')};
+        ${this._setValueForId(memdec.type.typeId, `${memdec.offset}`, 'value')};
     }
-                `;
-                currOffset += memdec.type.byteSize;
+`;
                 break;
             case TypeDescType.CombineType:
+            {
+                const accessoryType = memdec.type.accessory;
+                if (!accessoryType) {
+                    throw new Error('Must have accessory type!!!');
+                }
+                memsStr += `
+    #${memdec.name}: ${this._getMSGTSName(accessoryType.typeId)} | undefined;
+    public get ${memdec.name}() {
+        if (!this.#${memdec.name}) {
+            this.#${memdec.name} = messageFactory.create(${accessoryType.typeId}, this._buffer, this._offset + ${memdec.offset});
+        }
+        return this.#${memdec.name};
+    }
+`;
+                relys.add(accessoryType.typeId);
                 break;
+            }
             case TypeDescType.UserDefType:
-                relys.add(memdec.type.typeId);
+            {
+                const memType = this.idToDesc.get(memdec.type.typeId);
+                if (memType && memType.type === 'struct') {
+                    let gstr = ``;
+                    if (memdec.refType === EMemberRefType.reference) {
+                        gstr = `const addr = this._dataView.getInt32(this._offset + ${memdec.offset}, true);
+            if (!addr) {
+                return undefined;
+            }
+            this.#${memdec.name} = messageFactory.create(${memType.typeId}, this._buffer, addr);`;
+                    } else if (memdec.refType === EMemberRefType.inline) {
+                        gstr = `this.#${memdec.name} = messageFactory.create(${memType.typeId}, this._buffer, this._offset + ${memdec.offset});`;
+                    }
+                    memsStr += `
+    #${memdec.name}: ${this._getMSGTSName(memType.typeId)} | undefined;
+    public get ${memdec.name}()${memdec.refType === EMemberRefType.reference ? `: ${this._getMSGTSName(memType.typeId)} | undefined` : `: ${this._getMSGTSName(memType.typeId)}`} {
+        if (!this.#${memdec.name}) {
+            ${gstr}
+        }
+        return this.#${memdec.name};
+    }
+`;
+                }
                 break;
+            }
             }
         }));
 
@@ -242,7 +293,7 @@ messageFactory.registerLoading(${sdesc.typeId}, ${sdesc.typeName});
         let ctxString = '';
         let scope = '';
         let brely = -1;
-        if (desc.type === 'multiArray') {
+        if (desc.type === 'mapArray') {
             const id = desc.typeId;
             const nameparts = desc.typeName.split('_');
             if (nameparts.length === 3) {
@@ -253,7 +304,7 @@ messageFactory.registerLoading(${sdesc.typeId}, ${sdesc.typeName});
                 brely = ArrayTypeId;
 
                 ctxString = `
-export class ${desc.typeName} extends StructMultiArray {
+export class ${desc.typeName} extends StructArray {
     public get dims() { return ${dims}; }
     public get dataBytes() { return ${structByte}; }
 

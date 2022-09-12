@@ -12,3 +12,9 @@ struct TitleButtonClick {
     buttonType: TitleButtonEnum;
     points: Point2D[][];
 }
+
+struct RecuTest {
+    left: RecuTest;
+    right: RecuTest;
+    value: TitleButtonClick;
+}

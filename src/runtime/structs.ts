@@ -260,7 +260,7 @@ export class StructString extends StructBase {
     }
 }
 
-export abstract class StructMultiArray extends StructBase {
+export abstract class StructArray extends StructBase {
 
     public get size() {
         return this._dataView.getInt32(this._offset + 4, true);
@@ -279,6 +279,35 @@ export abstract class StructMultiArray extends StructBase {
     public abstract get dataBytes(): number;
 
     public abstract get typeId(): number;
+
+    public reserve(count: number) {
+        let originOffset = 0;
+        let originByte = 0;
+        if (this.dataOffset !== 0) {
+            if (this.capacity >= count) {
+                return;
+            }
+            originOffset = this.dataOffset;
+            originByte = this.capacity * this.dataBytes;
+            this.trashLength += originByte;
+        }
+        const newBuf = this.createSubBuffer(count * this.dataBytes);
+        this._dataView.setInt32(this._offset, newBuf, true);
+        this._dataView.setInt32(this._offset + 8, count, true);
+        this._dataView.setInt32(this._offset + 4, this.size, true);
+        if (originOffset) {
+            copyArrayBuffer(this._sBuffer._buffer, originOffset, this._sBuffer._buffer, this.dataOffset, originByte);
+        }
+    }
+
+    public pushElement(src: number) {
+        if (this.capacity - this.size < 1) {
+            this.reserve(Math.min(this.capacity * 2, this.capacity + 20));
+        }
+        const existSize = this.size;
+        this._dataView.setInt32(this._offset + 4, existSize + 1, true);
+        copyArrayBuffer(this._sBuffer._buffer, src, this._sBuffer._buffer, this.dataOffset + this.dataBytes * existSize, this.dataBytes);
+    }
 
     /**
      * Memory structure:  
@@ -316,7 +345,7 @@ export abstract class StructMap extends StructBase {
     public abstract get valueByte(): number;
 
     /**
-     * 4 byte: offset, 4 byte: capacity, 4 byte: length
+     * 4 byte: data offset, 4 byte: capacity, 4 byte: length
      *
      * @readonly
      * @memberof StructArray
@@ -372,12 +401,13 @@ export abstract class StructCombine extends StructBase {
     public abstract get typeId(): number;
 
     /**
-     * The type store in the content of the Ptr.
+     * CombineType 使用8字节，其中前4字节标示类型，后4字节如果类型长度<=4,那么标示为值，否则存储指针
+     * 当一个struct包含了combine类型的时候，它的byte一定是大于4的，所以不会发生循环包含的情况
      *
      * @memberof StructCombine
      */
     public get byteLength() {
-        return 4;
+        return 8;
     }
 
     public gcStruct(): void {

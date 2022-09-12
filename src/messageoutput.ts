@@ -70,7 +70,7 @@ export class OutputGenerator {
             this.idToDependence.set(acs.typeId, acs.relyTypes.filter(id => id >= MINUserDefTypeId));
         });
 
-        this._analyseAllDepth();
+        // this._analyseAllDepth();
     }
 
     public generate() {
