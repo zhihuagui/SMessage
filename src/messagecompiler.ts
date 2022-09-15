@@ -554,7 +554,7 @@ export class SMessageCompiler {
 
     private getNoAccessoryName(type: AllTypeDesc, usingId: boolean, replacedDim?: number): string {
         if (type.descType === TypeDescType.ArrayType) {
-            return `Array<${replacedDim ? replacedDim : type.arrayDims}, ${this.getNoAccessoryName(type.baseType, usingId)}>`;
+            return `${this.getNoAccessoryName(type.baseType, usingId)}${this.getRepeatRepeats(replacedDim ? replacedDim : type.arrayDims, '[]')}`;
         } else if (type.descType === TypeDescType.MapType) {
             return `Map<${this.getNoAccessoryName(type.keyType, usingId)}, ${this.getNoAccessoryName(type.valueType, usingId)}>`;
         } else if (type.descType === TypeDescType.CombineType) {
@@ -594,6 +594,7 @@ export class SMessageCompiler {
                         relyTypes: [prevType],
                         scope: currScope,
                         noAccessoryName: noAccName,
+                        humanReadName: this.getNoAccessoryName(type, false, i),
                     };
                     this._id2Accessory.set(typeId, sacc);
                     this._name2Accessory.set(typeName, sacc);
@@ -626,6 +627,7 @@ export class SMessageCompiler {
                 relyTypes: [ktype, vtype],
                 scope: currScope,
                 noAccessoryName: noAccName,
+                humanReadName: this.getNoAccessoryName(type, false),
             };
             this._id2Accessory.set(typeId, ret);
             this._name2Accessory.set(typeName, ret);
@@ -653,6 +655,7 @@ export class SMessageCompiler {
                 relyTypes: ctypes,
                 scope: currScope,
                 noAccessoryName: this.getNoAccessoryName(type, true),
+                humanReadName: this.getNoAccessoryName(type, false),
             };
             this._id2Accessory.set(typeId, ret);
             this._name2Accessory.set(typeName, ret);

@@ -305,6 +305,9 @@ messageFactory.registerLoading(${sdesc.typeId}, ${sdesc.typeName});
 
                 ctxString = `
 export class ${desc.typeName} extends StructArray {
+    public static humanReadableName(): '${desc.humanReadName}' {
+        return '${desc.humanReadName}';
+    }
     public get dims() { return ${dims}; }
     public get dataBytes() { return ${structByte}; }
 
@@ -364,6 +367,9 @@ messageFactory.registerLoading(${id}, ${desc.typeName});
             brely = MapTypeId;
             const mapCtx = `
 export class ${desc.typeName} extends StructMap {
+    public static humanReadableName(): '${desc.humanReadName}' {
+        return '${desc.humanReadName}';
+    }
 
     public get typeId(): number {
         return ${id};
@@ -393,6 +399,10 @@ messageFactory.registerLoading(${id}, ${desc.typeName});
             brely = CombineTypeId;
             ctxString = `
 export class ${desc.typeName} extends StructCombine {
+    public static humanReadableName(): '${desc.humanReadName}' {
+        return '${desc.humanReadName}';
+    }
+
     public get typeId() {
         return ${desc.typeId};
     }

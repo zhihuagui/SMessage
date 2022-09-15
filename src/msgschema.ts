@@ -32,6 +32,7 @@ export interface IAccessoryDesc {
     relyTypes: number[];
     typeName: string;
     noAccessoryName: string;
+    humanReadName: string;
     scope: string;
 }
 
