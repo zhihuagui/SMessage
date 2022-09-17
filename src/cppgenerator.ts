@@ -1,4 +1,4 @@
-import { OutputGenerator } from './messageoutput';
+import { GenerateService } from './generateservice';
 
 interface ScopeCtx {
     scope: string;
@@ -7,15 +7,15 @@ interface ScopeCtx {
 }
 
 export class CppGenerator {
-    constructor(baseGen: OutputGenerator) {
-        this._baseGen = baseGen;
+    constructor(genServ: GenerateService) {
+        this._genServ = genServ;
         this._scopeCtx = [];
     }
 
     public generateToDir(dir: string) {
-        this._baseGen.writeScopeString('ctx', dir, 'h');
+        this._genServ.writeScopeString('ctx', dir, 'h');
     }
 
     private _scopeCtx: ScopeCtx[];
-    private _baseGen: OutputGenerator;
+    private _genServ: GenerateService;
 }

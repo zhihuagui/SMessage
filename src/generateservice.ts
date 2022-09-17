@@ -9,7 +9,7 @@ export enum OutPutType {
 }
 
 
-export class OutputGenerator {
+export class GenerateService {
     constructor(schema: SMessageSchemas, outDir: string, historyJson: string) {
         this.schema = schema;
         this.outDir = outDir;
@@ -73,7 +73,7 @@ export class OutputGenerator {
         // this._analyseAllDepth();
     }
 
-    public generate() {
+    public writeHistory() {
         fs.writeFileSync(this._historyJson, JSON.stringify(this.schema));
     }
 
@@ -94,7 +94,7 @@ export class OutputGenerator {
         fs.writeFileSync(fileName, str);
     }
 
-    protected copyFile(srcFile: string, target: string, prefix?: string, suffix?: string) {
+    public copyFile(srcFile: string, target: string, prefix?: string, suffix?: string) {
         const opath = path.join(this.outDir, target);
         const spath = path.join('src', srcFile);
         if (!prefix && !suffix) {
@@ -105,7 +105,7 @@ export class OutputGenerator {
         }
     }
 
-    protected getDescByTypeId(typeId: number) {
+    public getDescByTypeId(typeId: number) {
         const desc = this.idToDesc.get(typeId);
         if (!desc) {
             throw new Error(`The type ${typeId} has no desc.`);
@@ -113,7 +113,7 @@ export class OutputGenerator {
         return desc;
     }
 
-    protected getSchemaTypeNameById(typeId: number) {
+    public getSchemaTypeNameById(typeId: number) {
         const tpName = this._idToClassName.get(typeId);
         if (tpName) {
             return tpName;
@@ -121,7 +121,7 @@ export class OutputGenerator {
         throw new Error('Cannot find the type.');
     }
 
-    protected getTypeSizeFromTypeId(typeId: number) {
+    public getTypeSizeFromTypeId(typeId: number) {
         if (this._idToBytesize.has(typeId)) {
             return this._idToBytesize.get(typeId);
         }
@@ -173,11 +173,11 @@ export class OutputGenerator {
         return 1;
     }
 
-    protected schema: SMessageSchemas;
-    protected outDir: string;
-    protected idToDesc: Map<number, StructDescription | EnumDescription | IAccessoryDesc> = new Map();
-    protected idToDependence: Map<number, number[]> = new Map();
-    protected idToDepth: Map<number, number> = new Map();
+    public schema: SMessageSchemas;
+    public outDir: string;
+    public idToDesc: Map<number, StructDescription | EnumDescription | IAccessoryDesc> = new Map();
+    public idToDependence: Map<number, number[]> = new Map();
+    public idToDepth: Map<number, number> = new Map();
 
     private _historyJson: string;
     private _idToBytesize: Map<number, number> = new Map();

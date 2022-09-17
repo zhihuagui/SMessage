@@ -1,5 +1,5 @@
 import path from 'path';
-import { OutputGenerator } from './messageoutput';
+import { GenerateService } from './generateservice';
 import { EnumDescription, StringTypeId, StructDescription, NativeSupportTypes, TypeDescType, IAccessoryDesc, ArrayTypeId, MapTypeId, CombineTypeId, StructBaseId, EMemberRefType } from './msgschema';
 
 interface NativeTypeGenDesc {
@@ -34,9 +34,13 @@ interface IScopeResult {
     contextLst: IScopeContext[];
 }
 
-export class TypescriptCodeGen extends OutputGenerator {
-    public override generate(): void {
-        this.copyFile('runtime/structs.ts', 'basestructs.ts'
+export class TypescriptCodeGen {
+    constructor(genSer: GenerateService) {
+        this._genService = genSer;
+    }
+
+    public generate(): void {
+        this._genService.copyFile('runtime/structs.ts', 'basestructs.ts'
             , `import { messageFactory } from './msgfactory';`
             , `messageFactory.registerLoading(${StringTypeId}, StructString);`);
 
@@ -46,15 +50,15 @@ export class TypescriptCodeGen extends OutputGenerator {
         this._idToScope.set(MapTypeId, 'basestructs');
         this._idToScope.set(CombineTypeId, 'basestructs');
 
-        this.schema.enumDefs.forEach((edesc) => {
+        this._genService.schema.enumDefs.forEach((edesc) => {
             this._typeDefs.set(edesc.typeId, this._generateEnumDef(edesc));
         });
 
-        this.schema.structDefs.forEach((sdesc) => {
+        this._genService.schema.structDefs.forEach((sdesc) => {
             this._typeDefs.set(sdesc.typeId, this._generateStructDef(sdesc));
         });
 
-        this.schema.accessories.forEach((access) => {
+        this._genService.schema.accessories.forEach((access) => {
             this._typeDefs.set(access.typeId, this._generateAccessoryDef(access));
         });
 
@@ -97,9 +101,9 @@ export class TypescriptCodeGen extends OutputGenerator {
                 const tscope = this._idToScope.get(tid);
                 if (tscope) {
                     if (importFromScope[tscope]) {
-                        importFromScope[tscope].add(this.getSchemaTypeNameById(tid));
+                        importFromScope[tscope].add(this._genService.getSchemaTypeNameById(tid));
                     } else {
-                        importFromScope[tscope] = new Set([this.getSchemaTypeNameById(tid)]);
+                        importFromScope[tscope] = new Set([this._genService.getSchemaTypeNameById(tid)]);
                     }
                 }
             });
@@ -127,11 +131,11 @@ export class TypescriptCodeGen extends OutputGenerator {
             rst.contextLst.forEach((octx) => {
                 fileString += octx.context;
             });
-            this.writeScopeString(fileString, scope, 'ts');
+            this._genService.writeScopeString(fileString, scope, 'ts');
         });
 
         this._generateFactory();
-        super.generate();
+        this._genService.writeHistory();
     }
 
     private _generateEnumDef(edesc: EnumDescription): IScopeContext {
@@ -228,7 +232,7 @@ ${edesc.valueTypes
             }
             case TypeDescType.UserDefType:
             {
-                const memType = this.idToDesc.get(memdec.type.typeId);
+                const memType = this._genService.idToDesc.get(memdec.type.typeId);
                 if (memType && memType.type === 'struct') {
                     let gstr = ``;
                     if (memdec.refType === EMemberRefType.reference) {
@@ -299,7 +303,7 @@ messageFactory.registerLoading(${sdesc.typeId}, ${sdesc.typeName});
             if (nameparts.length === 3) {
                 const dims = parseInt(nameparts[1], 10);
                 const baseTypeId = desc.relyTypes.length === 1 ? desc.relyTypes[0] : parseInt(nameparts[2], 10);
-                const structByte = this.getTypeSizeFromTypeId(baseTypeId);
+                const structByte = this._genService.getTypeSizeFromTypeId(baseTypeId);
                 const baseDesc = this._getMSGTSName(baseTypeId);
                 brely = ArrayTypeId;
 
@@ -338,10 +342,10 @@ messageFactory.registerLoading(${id}, ${desc.typeName});
             }
             const keyTypeId = parseInt(nameparts[1]);
             const valueTypeId = parseInt(nameparts[2]);
-            const keyByte = this.getTypeSizeFromTypeId(keyTypeId);
-            const kSchemaTypeName = this.getSchemaTypeNameById(keyTypeId);
+            const keyByte = this._genService.getTypeSizeFromTypeId(keyTypeId);
+            const kSchemaTypeName = this._genService.getSchemaTypeNameById(keyTypeId);
             const kGTSTypeName = this._getGeneralTSName(keyTypeId);
-            const valueByte = this.getTypeSizeFromTypeId(valueTypeId);
+            const valueByte = this._genService.getTypeSizeFromTypeId(valueTypeId);
             const baseDesc = this._getMSGTSName(valueTypeId);
             let getValueStr = '';
             if (keyTypeId === StringTypeId) {
@@ -420,7 +424,7 @@ export class ${desc.typeName} extends StructCombine {
         switch(this._sBuffer._dataView.getUint8(this._offset)) {
 ${candidateTypes.map((tyStr, index) => {
     const typeId = parseInt(tyStr);
-    const tpSize = this.getTypeSizeFromTypeId(typeId);
+    const tpSize = this._genService.getTypeSizeFromTypeId(typeId);
     if (!tpSize) {
         throw new Error('Must should be found size.');
     }
@@ -435,10 +439,10 @@ ${candidateTypes.map((tyStr, index) => {
 
 ${candidateTypes.map((tpStr, index) => {
     const typeId = parseInt(tpStr);
-    const tpName = this.getSchemaTypeNameById(typeId);
+    const tpName = this._genService.getSchemaTypeNameById(typeId);
     const upperFirstName = tpName.charAt(0)?.toUpperCase() + tpName.slice(1);
     const tsTpName = tpName in literalToNativeTypeName ? literalToNativeTypeName[tpName].tsTypeName : tpName;
-    const tpSize = this.getTypeSizeFromTypeId(typeId);
+    const tpSize = this._genService.getTypeSizeFromTypeId(typeId);
     let offsetStr: string;
     let setStr: string;
     if (tpSize && tpSize <= 4) {
@@ -482,7 +486,7 @@ messageFactory.registerLoading(${desc.typeId}, ${desc.typeName});
         const importFromScope: {[key: string]: Set<string>} = {};
         const itCNames: { id: number; cname: string }[] = [{id: StringTypeId, cname: 'StructString'}];
         this._typeDefs.forEach((tdef, tid) => {
-            if (this.idToDesc.get(tid)?.type === 'enum') {
+            if (this._genService.idToDesc.get(tid)?.type === 'enum') {
                 return;
             }
 
@@ -490,9 +494,9 @@ messageFactory.registerLoading(${desc.typeId}, ${desc.typeName});
             const tscope = this._idToScope.get(tid);
             if (tscope) {
                 if (importFromScope[tscope]) {
-                    importFromScope[tscope].add(this.getSchemaTypeNameById(tid));
+                    importFromScope[tscope].add(this._genService.getSchemaTypeNameById(tid));
                 } else {
-                    importFromScope[tscope] = new Set([this.getSchemaTypeNameById(tid)]);
+                    importFromScope[tscope] = new Set([this._genService.getSchemaTypeNameById(tid)]);
                 }
             }
         });
@@ -533,7 +537,7 @@ ${itCNames.map(pair => `
 
 export const messageFactory = new StructFactory();
 `
-        this.writeScopeString(factoryContent, 'msgfactory', 'ts');
+        this._genService.writeScopeString(factoryContent, 'msgfactory', 'ts');
     }
 
     private _getValueFromId(typeId: number, offsetStr: string) {
@@ -688,7 +692,7 @@ export const messageFactory = new StructFactory();
      * @returns Typescript中的输入性类型
      */
     private _getGeneralTSName(id: number) {
-        const name = this.getSchemaTypeNameById(id);
+        const name = this._genService.getSchemaTypeNameById(id);
         if (name in literalToNativeTypeName) {
             return literalToNativeTypeName[name].tsTypeName;
         }
@@ -704,7 +708,7 @@ export const messageFactory = new StructFactory();
      * @returns 获取在MSG中取出时的Typescript类型
      */
     private _getMSGTSName(id: number) {
-        const name = this.getSchemaTypeNameById(id);
+        const name = this._genService.getSchemaTypeNameById(id);
         if (name in literalToNativeTypeName) {
             return literalToNativeTypeName[name].tsTypeName;
         }
@@ -713,5 +717,7 @@ export const messageFactory = new StructFactory();
 
     private _typeDefs: Map<number, IScopeContext> = new Map();
     private _idToScope: Map<number, string> = new Map();
+
+    private _genService: GenerateService;
 }
 
