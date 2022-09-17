@@ -313,13 +313,18 @@ export class ${desc.typeName} extends StructArray {
 
     public at(index: number): ${baseDesc} {
         if (index < this.size) {
-            return ${this._getValueFromId(baseTypeId, `this.dataOffset + ${structByte} * index`)};
+            if (this._c[index]) {
+                return this._c[index];
+            }
+            const value = ${this._getValueFromId(baseTypeId, `this.dataOffset + ${structByte} * index`)};
+            this._c[index] = value;
+            return value;
         }
         throw new Error('[Index Exceed], Get index in array error.')
     }
 
     public get typeId() { return ${id}; }
-
+    private _c: ${baseDesc}[] = [];
 }
 messageFactory.registerLoading(${id}, ${desc.typeName});
 `;

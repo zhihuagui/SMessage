@@ -77,7 +77,7 @@ export class OutputGenerator {
         fs.writeFileSync(this._historyJson, JSON.stringify(this.schema));
     }
 
-    protected writeScopeString(str: string, scope: string, extStr: string) {
+    public writeScopeString(str: string, scope: string, extStr: string) {
         const subScopes = scope.split('.');
         const last = subScopes[subScopes.length - 1];
 
