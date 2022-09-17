@@ -17,6 +17,11 @@
             ],
             "cwd": "${workspaceFolder}",
             "args": ["-i", "test/midls", "-o", "test/output", "-v", "0.0.1"]
+        }, {
+            "type": "node",
+            "request": "launch",
+            "name": "tsOutT",
+            "program": "${workspaceFolder}/dist/test.js"
         }
     ]
 }

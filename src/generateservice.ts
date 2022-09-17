@@ -10,9 +10,8 @@ export enum OutPutType {
 
 
 export class GenerateService {
-    constructor(schema: SMessageSchemas, outDir: string, historyJson: string) {
+    constructor(schema: SMessageSchemas, historyJson: string) {
         this.schema = schema;
-        this.outDir = outDir;
         this._historyJson = historyJson;
 
         PredefinedTypes.forEach((pdt) => {
@@ -77,11 +76,10 @@ export class GenerateService {
         fs.writeFileSync(this._historyJson, JSON.stringify(this.schema));
     }
 
-    public writeScopeString(str: string, scope: string, extStr: string) {
+    public writeScopeString(odir: string, str: string, scope: string, extStr: string) {
         const subScopes = scope.split('.');
         const last = subScopes[subScopes.length - 1];
 
-        let odir = this.outDir;
         for (let i = 0; i < subScopes.length - 1; i++) {
             odir = path.join(odir, subScopes[i]);
             const exist = fs.existsSync(odir);
@@ -94,8 +92,8 @@ export class GenerateService {
         fs.writeFileSync(fileName, str);
     }
 
-    public copyFile(srcFile: string, target: string, prefix?: string, suffix?: string) {
-        const opath = path.join(this.outDir, target);
+    public copyFile(odir: string, srcFile: string, target: string, prefix?: string, suffix?: string) {
+        const opath = path.join(odir, target);
         const spath = path.join('src', srcFile);
         if (!prefix && !suffix) {
             fs.copyFileSync(spath, opath);
@@ -174,7 +172,6 @@ export class GenerateService {
     }
 
     public schema: SMessageSchemas;
-    public outDir: string;
     public idToDesc: Map<number, StructDescription | EnumDescription | IAccessoryDesc> = new Map();
     public idToDependence: Map<number, number[]> = new Map();
     public idToDepth: Map<number, number> = new Map();

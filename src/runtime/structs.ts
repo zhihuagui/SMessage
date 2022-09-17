@@ -30,6 +30,10 @@ export class StructBuffer {
 }
 
 export abstract class StructBase {
+    static byteLength() {
+        return 4;
+    }
+
     constructor(buf: ArrayBuffer | StructBuffer, offset: number) {
         if (buf instanceof StructBuffer) {
             this._sBuffer = buf;
@@ -68,11 +72,11 @@ export abstract class StructBase {
      * @readonly
      * @memberof StructBase
      */
-    public get trashLength() {
+    public get $_trashLength() {
         return this._dataView.getInt32(4, true);
     }
 
-    public set trashLength(len: number) {
+    public set $_trashLength(len: number) {
         this._dataView.setInt32(4, len, true);
     }
 
@@ -82,11 +86,11 @@ export abstract class StructBase {
      * @readonly
      * @memberof StructBase
      */
-    public get nextAvailableOffset() {
+    public get $_nextAvailableOffset() {
         return this._dataView.getInt32(8, true);
     }
 
-    public set nextAvailableOffset(nxtOffset: number) {
+    public set $_nextAvailableOffset(nxtOffset: number) {
         this._dataView.setInt32(8, nxtOffset, true);
     }
 
@@ -94,7 +98,7 @@ export abstract class StructBase {
 
     public abstract get byteLength(): number;
 
-    public abstract gcStruct(): void;
+    public abstract $_gcStruct(): void;
 
     protected get _dataView() {
         return this._sBuffer._dataView;
@@ -103,56 +107,64 @@ export abstract class StructBase {
         return this._sBuffer._buffer;
     }
 
-    protected updateCapacity(minAddCapacity: number) {
+    protected $_updateCapacity(minAddCapacity: number) {
         if (this._offset !== 12) {
             throw new Error('Cannot update capacity in a non-root struct.');
         }
 
-        if (this.trashLength / this.nextAvailableOffset > trashToGCRatio) {
+        if (this.$_trashLength / this.$_nextAvailableOffset > trashToGCRatio) {
             throw new Error('GC shold be impled.');
         } else {
             const nxtSize = Math.max(this._buffer.byteLength * 2, this._buffer.byteLength + Math.floor(this._buffer.byteLength * 0.5) + minAddCapacity);
             const newBuffer = new ArrayBuffer(nxtSize);
-            copyArrayBuffer(this._buffer, 0, newBuffer, 0, this.nextAvailableOffset);
+            copyArrayBuffer(this._buffer, 0, newBuffer, 0, this.$_nextAvailableOffset);
             this._sBuffer.reset(newBuffer);
         }
     }
 
-    protected extendSubBuffer(offset: number, originLength: number, toLength: number) {
+    protected $_extendSubBuffer(offset: number, originLength: number, toLength: number) {
         if (originLength >= toLength) {
             return offset;
         }
-        let nxtavail = this.nextAvailableOffset;
+        let nxtavail = this.$_nextAvailableOffset;
         if (offset + originLength === nxtavail) {
             nxtavail += toLength - originLength;
             if (nxtavail > this._sBuffer._buffer.byteLength) {
-                this.updateCapacity(nxtavail - this._sBuffer._buffer.byteLength);
-                this.nextAvailableOffset = nxtavail;
+                this.$_updateCapacity(nxtavail - this._sBuffer._buffer.byteLength);
+                this.$_nextAvailableOffset = nxtavail;
             }
             return offset;
         } else {
             const ret = nxtavail;
             nxtavail += toLength;
             if (nxtavail > this._sBuffer._buffer.byteLength) {
-                this.updateCapacity(nxtavail - this._sBuffer._buffer.byteLength);
-                this.nextAvailableOffset = nxtavail;
+                this.$_updateCapacity(nxtavail - this._sBuffer._buffer.byteLength);
+                this.$_nextAvailableOffset = nxtavail;
             }
             return ret;
         }
     }
 
-    protected createSubBuffer(byteLength: number) {
-        const curOffset = this.nextAvailableOffset;
+    public $_createSubBuffer(byteLength: number) {
+        const curOffset = this.$_nextAvailableOffset;
         const nxtavail = curOffset + byteLength;
         if (nxtavail > this._sBuffer._buffer.byteLength) {
-            this.updateCapacity(nxtavail - this._sBuffer._buffer.byteLength);
-            this.nextAvailableOffset = nxtavail;
+            this.$_updateCapacity(nxtavail - this._sBuffer._buffer.byteLength);
+            this.$_nextAvailableOffset = nxtavail;
         }
         return curOffset;
     }
 
-    protected updateOffset(newOffset: number) {
+    protected $_updateOffset(newOffset: number) {
         this._offset = newOffset;
+    }
+
+    public copyArrayBuffer(src: ArrayBuffer, soffset: number, target: ArrayBuffer, toffset: number, length: number) {
+        const srcDV = new DataView(src);
+        const tgtDV = new DataView(target);
+        for (let i = 0; i < length; i++) {
+            tgtDV.setUint8(i + toffset, srcDV.getUint8(i + soffset));
+        }
     }
 
     public copyToBuffer(sBuf: StructBuffer, offset: number) {
@@ -161,6 +173,10 @@ export abstract class StructBase {
         } else {
             throw new Error('Should implement');
         }
+    }
+
+    public $_structBuf() {
+        return this._sBuffer;
     }
 
     protected _sBuffer: StructBuffer;
@@ -215,7 +231,7 @@ export class StructString extends StructBase {
             }
         } else {
             if (dataOffset < 0) {
-                const ndoffset = this.createSubBuffer(buffer.length);
+                const ndoffset = this.$_createSubBuffer(buffer.length);
                 this._dataView.setInt32(this._offset, ndoffset, true);
                 this._dataView.setInt32(this._offset + 4, buffer.length, true);
                 this._dataView.setInt32(this._offset + 8, buffer.length, true);
@@ -226,12 +242,12 @@ export class StructString extends StructBase {
                     this._dataView.setInt32(this._offset + 4, buffer.length, true);
                     copyArrayBuffer(buffer, 0, this._buffer, dataOffset, this.length);
                 } else {
-                    const ndoffset = this.extendSubBuffer(dataOffset, cap, buffer.length);
+                    const ndoffset = this.$_extendSubBuffer(dataOffset, cap, buffer.length);
                     this._dataView.setInt32(this._offset, ndoffset, true);
                     this._dataView.setInt32(this._offset + 4, buffer.length, true);
                     this._dataView.setInt32(this._offset + 8, buffer.length, true);
                     copyArrayBuffer(buffer, 0, this._buffer, ndoffset, buffer.length);
-                    this.trashLength += cap;
+                    this.$_trashLength += cap;
                 }
             }
         }
@@ -255,7 +271,7 @@ export class StructString extends StructBase {
         return 12;
     }
 
-    public gcStruct(): void {
+    public $_gcStruct(): void {
         void (0);
     }
 }
@@ -289,9 +305,9 @@ export abstract class StructArray extends StructBase {
             }
             originOffset = this.dataOffset;
             originByte = this.capacity * this.dataBytes;
-            this.trashLength += originByte;
+            this.$_trashLength += originByte;
         }
-        const newBuf = this.createSubBuffer(count * this.dataBytes);
+        const newBuf = this.$_createSubBuffer(count * this.dataBytes);
         this._dataView.setInt32(this._offset, newBuf, true);
         this._dataView.setInt32(this._offset + 8, count, true);
         this._dataView.setInt32(this._offset + 4, this.size, true);
@@ -300,13 +316,22 @@ export abstract class StructArray extends StructBase {
         }
     }
 
-    public pushElement(src: number) {
+    /**
+     * 增加一个元素，指定了src则会从src复制
+     *
+     * @param {number} [src]
+     * @memberof StructArray
+     */
+    public pushElement(src?: number) {
         if (this.capacity - this.size < 1) {
             this.reserve(Math.min(this.capacity * 2, this.capacity + 20));
         }
         const existSize = this.size;
         this._dataView.setInt32(this._offset + 4, existSize + 1, true);
-        copyArrayBuffer(this._sBuffer._buffer, src, this._sBuffer._buffer, this.dataOffset + this.dataBytes * existSize, this.dataBytes);
+
+        if (src) {
+            copyArrayBuffer(this._sBuffer._buffer, src, this._sBuffer._buffer, this.dataOffset + this.dataBytes * existSize, this.dataBytes);
+        }
     }
 
     /**
@@ -320,7 +345,7 @@ export abstract class StructArray extends StructBase {
         return 12;
     }
 
-    public gcStruct(): void {
+    public $_gcStruct(): void {
         void(0);
     }
 }
@@ -354,7 +379,7 @@ export abstract class StructMap extends StructBase {
         return 12;
     }
 
-    public gcStruct(): void {
+    public $_gcStruct(): void {
         void(0);
     }
 
@@ -410,7 +435,7 @@ export abstract class StructCombine extends StructBase {
         return 8;
     }
 
-    public gcStruct(): void {
+    public $_gcStruct(): void {
         void(0);
     }
 }

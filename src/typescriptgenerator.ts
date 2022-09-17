@@ -35,12 +35,13 @@ interface IScopeResult {
 }
 
 export class TypescriptCodeGen {
-    constructor(genSer: GenerateService) {
+    constructor(genSer: GenerateService, outputDir: string) {
         this._genService = genSer;
+        this._outDir = outputDir;
     }
 
     public generate(): void {
-        this._genService.copyFile('runtime/structs.ts', 'basestructs.ts'
+        this._genService.copyFile(this._outDir, 'runtime/structs.ts', 'basestructs.ts'
             , `import { messageFactory } from './msgfactory';`
             , `messageFactory.registerLoading(${StringTypeId}, StructString);`);
 
@@ -93,6 +94,8 @@ export class TypescriptCodeGen {
             };
         });
 
+        let indexCtx = `export { messageFactory } from './msgfactory';\n`;
+
         Object.keys(scopeResult).forEach((scope) => {
             let fileString = '';
             const rst = scopeResult[scope];
@@ -131,8 +134,12 @@ export class TypescriptCodeGen {
             rst.contextLst.forEach((octx) => {
                 fileString += octx.context;
             });
-            this._genService.writeScopeString(fileString, scope, 'ts');
+            this._genService.writeScopeString(this._outDir, fileString, scope, 'ts');
+
+            indexCtx += `import './${scope.split('.').join('/')}';\n`;
         });
+
+        this._genService.writeScopeString(this._outDir, indexCtx, 'index', 'ts');
 
         this._generateFactory();
         this._genService.writeHistory();
@@ -265,6 +272,8 @@ export class ${sdesc.typeName} extends ${structBaseName} {
         return ${sdesc.typeId};
     }
 
+    public static byteLength() { return ${sdesc.byteLength}; }
+
     ${memsStr}
 
     public get typeId() {
@@ -275,7 +284,7 @@ export class ${sdesc.typeName} extends ${structBaseName} {
         return ${sdesc.byteLength};
     }
 
-    public gcStruct() {}
+    public $_gcStruct() {}
 
     public buildSelf() {
     }
@@ -312,6 +321,8 @@ export class ${desc.typeName} extends StructArray {
     public static humanReadableName(): '${desc.humanReadName}' {
         return '${desc.humanReadName}';
     }
+    public static byteLength() { return ${structByte}; }
+
     public get dims() { return ${dims}; }
     public get dataBytes() { return ${structByte}; }
 
@@ -327,12 +338,36 @@ export class ${desc.typeName} extends StructArray {
         throw new Error('[Index Exceed], Get index in array error.')
     }
 
+    /**
+     * 增加一个元素, 指定了src则会从src复制
+     *
+     * @param {number} [src]
+     * @memberof StructArray
+     */
+    public pushElement(src?: number) {
+        if (this.capacity - this.size < 1) {
+            this.reserve(Math.min(this.capacity * 2, this.capacity + 20));
+        }
+        const existSize = this.size;
+        this._dataView.setInt32(this._offset + 4, existSize + 1, true);
+
+        if (src) {
+            this.copyArrayBuffer(this._sBuffer._buffer, src, this._sBuffer._buffer, this.dataOffset + this.dataBytes * existSize, this.dataBytes);
+        }
+        if (this._c[existSize]) {
+            return this._c[existSize];
+        }
+        const value = ${this._getValueFromId(baseTypeId, `this.dataOffset + ${structByte} * existSize`)};
+        this._c[existSize] = value;
+        return value;
+    }
+
     public get typeId() { return ${id}; }
     private _c: ${baseDesc}[] = [];
 }
 messageFactory.registerLoading(${id}, ${desc.typeName});
 `;
-                scope = 'multiarrays';
+                scope = 'arraystructs';
             }
         } else if (desc.type === 'mapStruct') {
             const id = desc.typeId;
@@ -380,6 +415,8 @@ export class ${desc.typeName} extends StructMap {
         return '${desc.humanReadName}';
     }
 
+    public static byteLength() { return 12; }
+
     public get typeId(): number {
         return ${id};
     }
@@ -411,6 +448,8 @@ export class ${desc.typeName} extends StructCombine {
     public static humanReadableName(): '${desc.humanReadName}' {
         return '${desc.humanReadName}';
     }
+
+    public static byteLength() { return 8; }
 
     public get typeId() {
         return ${desc.typeId};
@@ -449,7 +488,7 @@ ${candidateTypes.map((tpStr, index) => {
         offsetStr = 'this._offset + 4';
         setStr = this._setValueForId(typeId, 'this._offset + 4', 'value');
     } else {
-        setStr = `const bufAddr = this.createSubBuffer(${tpSize});
+        setStr = `const bufAddr = this.$_createSubBuffer(${tpSize});
         this._sBuffer._dataView.setInt32(this._offset + 4, bufAddr);
         ${this._setValueForId(typeId, 'bufAddr', 'value')}`;
         offsetStr = 'this._sBuffer._dataView.getInt32(this._offset + 4, true)';
@@ -515,7 +554,8 @@ messageFactory.registerLoading(${desc.typeId}, ${desc.typeName});
 import type { StructBase, StructBuffer, StructString } from './basestructs';
 ${importStr}
 type DerivedStructClass = {
-    new (buf: ArrayBuffer | StructBuffer, offset: number) : StructBase;
+    new (buf: ArrayBuffer | StructBuffer, offset: number): StructBase;
+    byteLength(): number;
 }
 class StructFactory {
     public registerLoading(typeId: number, cls: DerivedStructClass) {
@@ -527,9 +567,23 @@ ${itCNames.map(pair => `
     public create(typeId: number, buf: ArrayBuffer | StructBuffer, offset: number): StructBase {
         const clsDef = this._clasDefs[typeId];
         if (!clsDef) {
-            throw new Error(\`Cannot find the def of typeId: \${typeId}\`)
+            throw new Error(\`Cannot find the def of typeId: \${typeId}\`);
         }
         return new clsDef(buf, offset);
+    }
+
+    /**
+     * 在struct内部创建一个子的struct, 子struct将会出现在原struct的内存空间  
+     * 如果struct所在的buffer不够, 将会自动extend内存空间
+     */${itCNames.map(pair => `
+    public createInStruct(typeId: ${pair.id}, struct: StructBase): ${pair.cname};`).join('')}
+    public createInStruct(typeId: number, struct: StructBase): StructBase {
+        const clsDef = this._clasDefs[typeId];
+        if (!clsDef) {
+            throw new Error(\`Cannot find the def of typeId: \${typeId}\`);
+        }
+        const offset = struct.$_createSubBuffer(clsDef.byteLength());
+        return new clsDef(struct.$_structBuf(), offset);
     }
 
     private _clasDefs: DerivedStructClass[] = [];
@@ -537,7 +591,7 @@ ${itCNames.map(pair => `
 
 export const messageFactory = new StructFactory();
 `
-        this._genService.writeScopeString(factoryContent, 'msgfactory', 'ts');
+        this._genService.writeScopeString(this._outDir, factoryContent, 'msgfactory', 'ts');
     }
 
     private _getValueFromId(typeId: number, offsetStr: string) {
@@ -719,5 +773,6 @@ export const messageFactory = new StructFactory();
     private _idToScope: Map<number, string> = new Map();
 
     private _genService: GenerateService;
+    private _outDir: string;
 }
 

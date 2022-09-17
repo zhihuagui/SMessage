@@ -1,5 +1,6 @@
 import path from 'path';
 import { DirWalker } from './dirwalker';
+import { GenerateService } from './generateservice';
 import { SMessageCompiler } from './messagecompiler';
 import { TypescriptCodeGen } from './typescriptgenerator';
 import { versionStrToNums } from './version';
@@ -59,5 +60,7 @@ if (!compiler.currentSchema) {
     throw new Error('The schema compile error.');
 }
 
-const gen = new TypescriptCodeGen(compiler.currentSchema, option.outputDir, dirWalker.historyFileName);
+const genSer = new GenerateService(compiler.currentSchema, dirWalker.historyFileName);
+
+const gen = new TypescriptCodeGen(genSer, option.outputDir);
 gen.generate();
