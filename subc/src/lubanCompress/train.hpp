@@ -21,6 +21,7 @@ public:
         addTrainString(mUncompressBin.getTypeRestrictionAll());
         mDict.resize(1024 * 1024 * 2);
 
+#ifdef ZDICT_STATIC_LINKING_ONLY
         ZDICT_fastCover_params_t param = {};
         param.k = 1996;
         param.d = 8;
@@ -28,7 +29,11 @@ public:
         param.steps = 4;
         param.zParams.notificationLevel = 2;
         auto rstSize = ZDICT_trainFromBuffer_fastCover(mDict.data(), mDict.size(), mSampleBuffer.data(), mSampleSize.data(), mSampleSize.size(), param);
+#else
+        auto rstSize = ZDICT_trainFromBuffer(mDict.data(), mDict.size(), mSampleBuffer.data(), mSampleSize.data(), mSampleSize.size());
+#endif // ZDICT_STATIC_LINKING_ONLY
         mDict.resize(rstSize);
+        printf("[NOTE]: The Dict generated with size: %llu\n", rstSize);
     }
 
 private:

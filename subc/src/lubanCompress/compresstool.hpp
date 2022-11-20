@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#define ZSTD_DISABLE_DEPRECATE_WARNINGS 1
 #define ZSTD_STATIC_LINKING_ONLY 1
 #define ZDICT_STATIC_LINKING_ONLY 1
 #include "zstd.h"
@@ -94,6 +95,7 @@ public:
 
 private:
     constexpr static size_t CHUNK = 1024 * 256;
+    static uint8_t* mCBuffer;
     static ZSTD_DCtx *mDCtx;
     static ZSTD_CCtx *mCCtx;
 };

@@ -8,6 +8,8 @@ uint8_t *TargetBuffer::mBuffer = TargetBuffer::mSizedBuffer + 4;
 ZSTD_CCtx *NoDictTool::mCCtx = ZSTD_createCCtx();
 ZSTD_DCtx *NoDictTool::mDCtx = ZSTD_createDCtx();
 
+uint8_t* NoDictTool::mCBuffer = new uint8_t[NoDictTool::CHUNK];
+
 uint8_t *NoDictTool::ungzipToTransferBuffer(char *input, uint32_t length)
 {
     z_stream strm;
@@ -22,15 +24,13 @@ uint8_t *NoDictTool::ungzipToTransferBuffer(char *input, uint32_t length)
         return 0;
     }
 
-    char *output;
-    unsigned char chunk[CHUNK];
     uint32_t have;
     uint32_t currentSize = 0;
 
     do
     {
         strm.avail_out = CHUNK;
-        strm.next_out = chunk;
+        strm.next_out = mCBuffer;
         ret = inflate(&strm, Z_FINISH);
         if (ret == Z_NEED_DICT || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR)
         {
@@ -39,7 +39,7 @@ uint8_t *NoDictTool::ungzipToTransferBuffer(char *input, uint32_t length)
         }
         have = CHUNK - strm.avail_out;
         TargetBuffer::updateToSizeWithCopy(currentSize + have);
-        memcpy(TargetBuffer::mBuffer + currentSize, chunk, have);
+        memcpy(TargetBuffer::mBuffer + currentSize, mCBuffer, have);
         currentSize += have;
     } while (strm.avail_out == 0);
     inflateEnd(&strm);
@@ -60,19 +60,17 @@ uint8_t * NoDictTool::gzipToTransferBuffer(char* input, uint32_t length, int lev
     strm.avail_in = length;
     strm.next_in = (Bytef*)input;
 
-    char* output;
-    unsigned char chunk[CHUNK];
     uint32_t have;
     uint32_t currentSize = 0;
 
     do {
         strm.avail_out = CHUNK;
-        strm.next_out = chunk;
+        strm.next_out = mCBuffer;
         ret = deflate(&strm, Z_FINISH);    /* no bad return value */
         have = CHUNK - strm.avail_out;
 
         TargetBuffer::updateToSizeWithCopy(currentSize + have);
-        memcpy(TargetBuffer::mBuffer + currentSize, chunk, have);
+        memcpy(TargetBuffer::mBuffer + currentSize, mCBuffer, have);
         currentSize += have;
     } while (strm.avail_out == 0);
 

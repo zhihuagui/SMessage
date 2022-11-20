@@ -14,13 +14,17 @@ extern "C"
         free(pointer);
     }
 
-    uint32_t EMSCRIPTEN_KEEPALIVE acceptPackageCompressFile(int packageId, uint8_t* data) {
+    uint32_t EMSCRIPTEN_KEEPALIVE setPackageCompressFile(int packageId, uint8_t* data) {
         PDMCompressedData* pdmData = new PDMCompressedData(data);
         if (_allPDMCompressDatas.find(packageId) != _allPDMCompressDatas.end()) {
             delete _allPDMCompressDatas[packageId];
         }
         _allPDMCompressDatas.insert({ packageId, pdmData });
-        return 1;
+
+        if (_allPDMCompressDatas.find(packageId) != _allPDMCompressDatas.end()) {
+            return packageId;
+        }
+        return 0;
     }
 
     void* EMSCRIPTEN_KEEPALIVE getFormulaById(int packageId, int id) {

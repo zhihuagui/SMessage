@@ -53,9 +53,13 @@ int main(int argc, char** argv)
     }
     printf("Size of RST: %d \n", reinterpret_cast<int32_t*>(rst)[0]);
     auto rststr = std::string((char*)rst + 4, reinterpret_cast<int32_t*>(rst)[0]);
-    auto diff = end - start;
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     printf("Get %s with id=%d used: %lld microseconds.\n", mode.c_str(), id, diff.count());
-    printf("\n%s\n", rststr.c_str());
-
+    //printf("\n%s\n", rststr.c_str());
+    start = std::chrono::system_clock::now();
+    rst = pdmData.getGroupByTypeAll();
+    end = std::chrono::system_clock::now();
+    diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    printf("Re Get %s with id=%d used: %lld microseconds.\n", mode.c_str(), id, diff.count());
     return 1;
 }

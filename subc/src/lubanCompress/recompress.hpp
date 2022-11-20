@@ -3,7 +3,7 @@
 #include "decompress.hpp"
 #include "compresstool.hpp"
 
-enum class CompressIndex
+enum class CompressIndex: uint32_t
 {
     MAGVERSION = 0,
     TotalSize,
@@ -145,7 +145,8 @@ private:
         {
             auto rst = cmps.compressString(items[i]->data);
             localAddrs[i * 2] = items[i]->numberName;
-            memcpy(mBuffer + bufNext, rst.data(), rst.size());
+            memoryCopyToBuffer(bufNext, rst);
+            localAddrs = reinterpret_cast<int32_t*>(mBuffer) + (startOffset >> 2);
             bufNext += rst.size();
             localAddrs[i * 2 + 3] = bufNext;
         }
@@ -155,15 +156,23 @@ private:
     int addStringItem(const std::string &str, int offset, CompressTool &cmps)
     {
         auto cmpRst = cmps.compressString(str);
+        memoryCopyToBuffer(offset + 4, cmpRst);
         auto strStartAddr = reinterpret_cast<int32_t *>(mBuffer) + (offset >> 2);
         strStartAddr[0] = cmpRst.size();
-        memcpy(mBuffer + offset + 4, cmpRst.data(), cmpRst.size());
         return 4 + cmpRst.size() + offset;
     }
 
     int align(int offset, uint32_t alignment)
     {
         return (offset + (alignment - 1)) & (-alignment);
+    }
+
+    inline void memoryCopyToBuffer(int offset, const std::vector<uint8_t>& sourceBuffer) {
+        auto requireLen = offset + sourceBuffer.size();
+        if (mBufferLen < requireLen) {
+            reSizeBuffer(requireLen * 1.5);
+        }
+        memcpy(mBuffer + offset, sourceBuffer.data(), sourceBuffer.size());
     }
 
     bool reSizeBuffer(int newSize) {
@@ -312,6 +321,7 @@ private:
 
         auto rLoc = binSearchValue(8, indexStart, indexEnd, id);
         if (rLoc < 0) {
+            printf("bin search failed.\n");
             return nullptr;
         }
         rLoc = (rLoc + indexStart) >> 2;
