@@ -30,6 +30,13 @@ export enum ETypeCode {
     Null,
 }
 
+type JsonValue = string | number | boolean | null | JsonArray | JsonObject;
+
+export type JsonArray = JsonValue[];
+export interface JsonObject {
+    [key: string]: JsonValue;
+}
+
 export const textEncoder = new TextEncoder();
 export const textDecoder = new TextDecoder();
 export class BsBuffer {
@@ -49,8 +56,8 @@ export class BsBuffer {
         const startPos = this.mCurrentOffset;
         for (let i = 0; i < strs.length; i++) {
             const left = this.mBuffer.length - this.mCurrentOffset;
-            if (left < strs[i].length >> 1) {
-                this.updateCapacity(this.mBuffer.length * 3);
+            if (left < strs[i].length >> 2) {
+                this.updateCapacity(this.mBuffer.length * 2);
             }
             const rst = textEncoder.encodeInto(strs[i], this.mBuffer.subarray(this.mCurrentOffset));
             this.mCurrentOffset += rst.written || 0;
@@ -60,12 +67,48 @@ export class BsBuffer {
         return startPos;
     }
 
+    public appendString(str: string) {
+        const left = this.mBuffer.length - this.mCurrentOffset;
+        if (left < str.length >> 2) {
+            this.updateCapacity(this.mBuffer.length * 2);
+        }
+        const startPos = this.mCurrentOffset;
+        const rst = textEncoder.encodeInto(str, this.mBuffer.subarray(this.mCurrentOffset));
+        this.mCurrentOffset += rst.written || 0;
+        this.mDataview.setUint8(this.mCurrentOffset, 0);
+        this.mCurrentOffset++;
+        return startPos;
+    }
+
+    public appendNumber(num: number) {
+        const left = this.mBuffer.length - this.mCurrentOffset;
+        if (left < 8) {
+            this.updateCapacity(this.mBuffer.length * 2);
+        }
+        this.mDataview.setFloat64(this.mCurrentOffset, num, true);
+        const ret = this.mCurrentOffset;
+        this.mCurrentOffset += 8;
+        return ret;
+    }
+
     public setInt32(offset: number, value: number) {
         this.mDataview.setInt32(offset, value, true);
     }
 
     public getInt32(offset: number) {
         return this.mDataview.getInt32(offset, true);
+    }
+
+    public setUint16(offset: number, value: number) {
+        this.mDataview.setUint16(offset, value, true);
+    }
+
+    public getUint16(offset: number) {
+        this.mDataview.getUint16(offset);
+    }
+
+    public setUint8(offset: number, value: number) {
+        this.mDataview.setUint8(offset, value);
     }
 
     public mBuffer: Uint8Array;
@@ -102,3 +145,14 @@ class BsValueFactory {
 }
 
 export const bsValueFactory = new BsValueFactory();
+
+export class BsViewUtil {
+    public static getStringBytes(bv: DataView, offset: number) {
+        for (let i = offset; i < bv.byteLength; i++) {
+            if (bv.getUint8(i) === 0) {
+                return i - offset;
+            }
+        }
+        return 0;
+    }
+}
